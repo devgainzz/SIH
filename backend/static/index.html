@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Government e-Marketplace (GeM) | AI Bid Compliance Verification Portal (SIH26100)</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gov: {
+              navy: '#0B3D91',
+              darkNavy: '#072C6A',
+              deepNavy: '#051E48',
+              saffron: '#FF9933',
+              saffronDark: '#D97706',
+              green: '#138808',
+              greenDark: '#0D6E05',
+              red: '#C51C1C',
+              redDark: '#991B1B',
+              amber: '#D97706',
+              amberDark: '#B45309',
+              bg: '#F5F5F5',
+              card: '#FFFFFF',
+              border: '#D1D5DB',
+              borderDark: '#9CA3AF',
+              text: '#1F2937',
+              muted: '#4B5563',
+              tableHeader: '#0B3D91',
+              tableZebra: '#F9FAFB'
+            }
+          },
+          fontFamily: {
+            sans: ['"Noto Sans"', 'Roboto', 'Arial', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          },
+          borderRadius: {
+            'none': '0px',
+            'sm': '2px',
+            'DEFAULT': '2px',
+            'md': '2px',
+            'lg': '2px',
+            'xl': '2px',
+            '2xl': '2px',
+            '3xl': '2px',
+            'full': '2px'
+          },
+          boxShadow: {
+            'none': 'none',
+            'sm': 'none',
+            'DEFAULT': 'none',
+            'md': 'none',
+            'lg': 'none',
+            'xl': 'none',
+            '2xl': 'none',
+            'inner': 'none'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts: Noto Sans & Roboto -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=Roboto:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- React 18 & Babel for standalone compilation -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    :root {
+      --gov-font-scale: 1;
+    }
+    body {
+      font-family: 'Noto Sans', 'Roboto', Arial, sans-serif;
+      background-color: #F5F5F5;
+      color: #1F2937;
+      font-size: calc(14px * var(--gov-font-scale));
+      line-height: 1.5;
+    }
+    
+    /* Strict Government Portal Aesthetics */
+    * {
+      border-radius: 0px !important;
+      box-shadow: none !important;
+    }
+    
+    /* Allow minor 2px radius on specific buttons/inputs */
+    button, input, select, textarea, .gov-tag {
+      border-radius: 2px !important;
+    }
+
+    /* Tricolor ribbon */
+    .tricolor-bar {
+      height: 4px;
+      width: 100%;
+      background: linear-gradient(to right, #FF9933 0%, #FF9933 33.33%, #FFFFFF 33.33%, #FFFFFF 66.66%, #138808 66.66%, #138808 100%);
+    }
+    .tricolor-accent-line {
+      height: 2px;
+      width: 100%;
+      background: linear-gradient(to right, #FF9933 0%, #FF9933 33.33%, #FFFFFF 33.33%, #FFFFFF 66.66%, #138808 66.66%, #138808 100%);
+    }
+
+    /* ========================================================================= */
+    /* TRICOLOUR-THEMED BUTTON SYSTEM */
+    /* ========================================================================= */
+    
+    /* 1. Primary Action Button (Saffron #FF9933 with Navy Text & Subtle Tricolor Bottom Border) */
+    .gov-btn-primary {
+      background-color: #FF9933 !important;
+      color: #061C48 !important;
+      border: 1px solid #D97706 !important;
+      border-bottom: 3px solid #138808 !important;
+      font-weight: 800 !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.5px !important;
+      padding: 8px 16px !important;
+      transition: background-color 0.15s ease-in-out !important;
+      cursor: pointer !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 6px !important;
+    }
+    .gov-btn-primary:hover:not(:disabled) {
+      background-color: #E68A00 !important;
+      color: #000000 !important;
+    }
+    .gov-btn-primary:disabled {
+      opacity: 0.55 !important;
+      cursor: not-allowed !important;
+    }
+
+    /* 2. Secondary/Confirm Positive Button (Solid Green #138808 with White Text) */
+    .gov-btn-secondary {
+      background-color: #138808 !important;
+      color: #FFFFFF !important;
+      border: 1px solid #0D6E05 !important;
+      font-weight: 700 !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.5px !important;
+      padding: 6px 14px !important;
+      transition: background-color 0.15s ease-in-out !important;
+      cursor: pointer !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 6px !important;
+    }
+    .gov-btn-secondary:hover:not(:disabled) {
+      background-color: #0D6E05 !important;
+    }
+
+    /* 3. Tertiary / Neutral Outline Button (Navy Outline #0B3D91 with White Background) */
+    .gov-btn-neutral {
+      background-color: #FFFFFF !important;
+      color: #0B3D91 !important;
+      border: 1px solid #0B3D91 !important;
+      font-weight: 700 !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.5px !important;
+      padding: 6px 14px !important;
+      transition: background-color 0.15s ease-in-out !important;
+      cursor: pointer !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 6px !important;
+    }
+    .gov-btn-neutral:hover:not(:disabled) {
+      background-color: #F1F5F9 !important;
+      color: #072C6A !important;
+    }
+
+    /* 4. Destructive / Red Action Button */
+    .gov-btn-danger {
+      background-color: #C51C1C !important;
+      color: #FFFFFF !important;
+      border: 1px solid #991B1B !important;
+      font-weight: 700 !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.5px !important;
+      padding: 6px 14px !important;
+      transition: background-color 0.15s ease-in-out !important;
+      cursor: pointer !important;
+    }
+    .gov-btn-danger:hover:not(:disabled) {
+      background-color: #991B1B !important;
+    }
+
+    /* Accessible Skip Link */
+    .skip-link {
+      position: absolute;
+      top: -40px;
+      left: 10px;
+      background: #0B3D91;
+      color: #FFFFFF;
+      padding: 8px 16px;
+      z-index: 1000;
+      font-weight: 700;
+      text-decoration: none;
+      transition: top 0.2s;
+    }
+    .skip-link:focus {
+      top: 10px;
+      outline: 2px solid #FF9933;
+    }
+
+    /* Formal Government Section Headings */
+    .gov-section-heading {
+      color: #0B3D91;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: calc(15px * var(--gov-font-scale));
+      letter-spacing: 0.5px;
+      border-bottom: 2px solid #0B3D91;
+      padding-bottom: 6px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Government Callout Boxes (Gazette / Notice Board style) */
+    .gov-callout {
+      border: 1px solid #D1D5DB;
+      border-left: 4px solid #0B3D91;
+      background-color: #FFFFFF;
+      padding: 12px 16px;
+    }
+    .gov-callout-warning {
+      border: 1px solid #D1D5DB;
+      border-left: 4px solid #D97706;
+      background-color: #FFFBEB;
+      padding: 12px 16px;
+    }
+    .gov-callout-danger {
+      border: 1px solid #D1D5DB;
+      border-left: 4px solid #C51C1C;
+      background-color: #FEF2F2;
+      padding: 12px 16px;
+    }
+    .gov-callout-success {
+      border: 1px solid #D1D5DB;
+      border-left: 4px solid #138808;
+      background-color: #F0FDF4;
+      padding: 12px 16px;
+    }
+
+    /* Formal Table Styling */
+    .gov-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #D1D5DB;
+      font-size: calc(13px * var(--gov-font-scale));
+    }
+    .gov-table th {
+      background-color: #0B3D91;
+      color: #FFFFFF;
+      font-weight: 700;
+      text-align: left;
+      padding: 8px 12px;
+      border: 1px solid #072C6A;
+      text-transform: uppercase;
+      font-size: calc(12px * var(--gov-font-scale));
+      letter-spacing: 0.3px;
+    }
+    .gov-table td {
+      padding: 8px 12px;
+      border: 1px solid #E5E7EB;
+      color: #1F2937;
+    }
+    .gov-table tr:nth-child(even) {
+      background-color: #F9FAFB;
+    }
+    .gov-table tr:hover {
+      background-color: #F3F4F6;
+    }
+
+    /* Accessibility Focus Rings */
+    a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 2px solid #0B3D91 !important;
+      outline-offset: 2px !important;
+    }
+
+    /* Custom scrollbar */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #F1F5F9;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #9CA3AF;
+    }
+  </style>
+</head>
+<body class="custom-scrollbar">
+  <!-- Accessible Skip Navigation -->
+  <a href="#main-content" class="skip-link">Skip to Main Content</a>
+
+  <div id="root"></div>
+
+  <!-- React Application Source -->
+  <script type="text/babel" src="/static/app.js"></script>
+</body>
+</html>
