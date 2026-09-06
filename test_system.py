@@ -1,8 +1,27 @@
+"""
+================================================================================
+BidVerify AI — GeM Bid Compliance Verification (SIH26100)
+End-to-End System Verification & Integration Test Suite
+================================================================================
+
+Description:
+    This verification script tests all major core subsystems without requiring
+    an external network connection or LLM API keys:
+    1. Database Initialization & Demonstration Data Seeding.
+    2. Multi-Format Document Processing & Semantic Text Chunking.
+    3. AI Compliance Verification Engine on Numerical, Experience & ISO clauses.
+    4. Procurement Officer Manual Overrides & Audit Logging.
+    5. Print-Ready GeM Compliance Audit PDF Report Generation.
+
+Usage:
+    python test_system.py
+"""
+
 import os
 import sys
 import json
 
-# Force UTF-8 on stdout for Windows consoles
+# Force UTF-8 on standard output to prevent cp1252 character encoding issues on Windows
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -18,12 +37,18 @@ from app.services.document_processor import DocumentProcessor
 from app.services.compliance_engine import ComplianceEngine
 from app.services.report_generator import ReportGenerator
 
+
 def run_verification_tests():
+    """
+    Executes the 5-stage automated verification suite for BidVerify AI.
+    """
     print("\n=======================================================")
-    print("  BidVerify AI (SIH26100) — System Verification Suite")
+    print("  🇮🇳 BidVerify AI (SIH26100) — System Verification Suite")
     print("=======================================================\n")
 
-    # 1. Database Init & Seeding
+    # --------------------------------------------------------------------------
+    # [Test 1/5] Database Initialization & Demonstration Data Seeding
+    # --------------------------------------------------------------------------
     print("[Test 1/5] Initializing Database & Seeding Sample GeM Data...")
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -38,7 +63,9 @@ def run_verification_tests():
     assert len(tenders) >= 1, "Tenders must be seeded"
     print(" [PASS] Database Initialization & Seeding OK\n")
 
-    # 2. Document Processor Verification
+    # --------------------------------------------------------------------------
+    # [Test 2/5] Document Parsing & Page-Level Text Chunking
+    # --------------------------------------------------------------------------
     print("[Test 2/5] Testing Document Text Chunking & Page Metadata Extraction...")
     sample_text = """M/S TEST BIDDER LTD
 Average Turnover for 3 years: INR 22.50 Crores.
@@ -56,9 +83,12 @@ Experience of over 8 years in server deployments.
     assert "22.50 Crores" in chunks[0]["text"], "Turnover must be in extracted text"
     print(" [PASS] Document Processing OK\n")
 
-    # 3. AI Compliance Engine Verification
+    # --------------------------------------------------------------------------
+    # [Test 3/5] AI Compliance Engine Evaluation Logic
+    # --------------------------------------------------------------------------
     print("[Test 3/5] Testing Compliance Engine on Criteria Clauses...")
-    # Test Turnover requirement
+    
+    # Test 3a: Compliant Financial Turnover (₹22.50 Cr >= ₹10.00 Cr)
     req_turnover = {
         "title": "Annual Financial Turnover",
         "description": "Minimum average annual turnover >= 10 Crores",
@@ -72,7 +102,7 @@ Experience of over 8 years in server deployments.
     assert verdict["status"] == "COMPLIANT", "22.50 Cr should satisfy >= 10 Cr"
     assert "22.50" in verdict["extracted_value"]
 
-    # Test ISO Certificate requirement
+    # Test 3b: Valid ISO 9001 Certificate
     req_iso = {
         "title": "ISO 9001 Quality Certification",
         "description": "Valid ISO 9001:2015 accreditation certificate",
@@ -83,23 +113,24 @@ Experience of over 8 years in server deployments.
     print(f" -> ISO Verdict: status={verdict_iso['status']}, extracted={verdict_iso['extracted_value']}")
     assert verdict_iso["status"] == "COMPLIANT", "Valid ISO until 2028 should be COMPLIANT"
 
-    # Test Non-compliant scenario (below threshold)
+    # Test 3c: Deficient Turnover (₹3.5 Cr < ₹10.0 Cr)
     low_chunks = [{"document_name": "turnover.txt", "page_number": 1, "text": "Annual turnover is Rs 3.5 Crores."}]
     verdict_low = ComplianceEngine._evaluate_with_smart_engine(req_turnover, low_chunks)
     print(f" -> Deficient Turnover Verdict: status={verdict_low['status']}, extracted={verdict_low['extracted_value']}")
     assert verdict_low["status"] == "NON_COMPLIANT", "3.5 Cr should be NON_COMPLIANT for 10 Cr threshold"
     print(" [PASS] Compliance Matching & Threshold Logic OK\n")
 
-    # 4. Multi-Vendor Evaluation & Officer Override
+    # --------------------------------------------------------------------------
+    # [Test 4/5] Multi-Vendor Evaluation & Officer Manual Override
+    # --------------------------------------------------------------------------
     print("[Test 4/5] Testing Vendor Audit Verdicts & Officer Manual Override...")
     vendor_alpha = db.query(VendorBid).filter(VendorBid.vendor_name.like("%AlphaTech%")).first()
     assert vendor_alpha is not None, "AlphaTech must exist"
     print(f" -> AlphaTech Status: {vendor_alpha.overall_status}, Score: {vendor_alpha.compliance_score}%, Compliant: {vendor_alpha.compliant_count}")
 
-    # Test Officer Override on a verdict
+    # Test Officer Override recording
     first_verdict = db.query(ComplianceVerdict).filter(ComplianceVerdict.vendor_bid_id == vendor_alpha.id).first()
     assert first_verdict is not None
-    orig_status = first_verdict.status
     
     first_verdict.is_overridden = True
     first_verdict.officer_override_status = "NON_COMPLIANT"
@@ -112,13 +143,15 @@ Experience of over 8 years in server deployments.
     assert first_verdict.officer_override_status == "NON_COMPLIANT"
     print(f" -> Manual Override recorded: [Overridden to {first_verdict.officer_override_status}] by {first_verdict.officer_name}")
 
-    # Revert override
+    # Revert override back to AI verdict
     first_verdict.is_overridden = False
     first_verdict.officer_override_status = None
     db.commit()
     print(" [PASS] Officer Override & Audit Trail OK\n")
 
-    # 5. PDF Report Generation Verification
+    # --------------------------------------------------------------------------
+    # [Test 5/5] ReportLab PDF Report Generation
+    # --------------------------------------------------------------------------
     print("[Test 5/5] Testing PDF Report Generation...")
     t1 = db.query(Tender).first()
     v1 = db.query(VendorBid).first()
@@ -156,6 +189,6 @@ Experience of over 8 years in server deployments.
     print("  ALL 5 VERIFICATION TESTS PASSED SUCCESSFULLY! ")
     print("=======================================================\n")
 
+
 if __name__ == "__main__":
     run_verification_tests()
-

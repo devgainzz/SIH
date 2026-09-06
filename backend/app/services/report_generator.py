@@ -1,16 +1,34 @@
+"""
+================================================================================
+BidVerify AI — GeM Bid Compliance Verification (SIH26100)
+Official Print-Ready PDF Audit Report Generator
+================================================================================
+
+Description:
+    This service builds downloadable, formal compliance audit reports using ReportLab.
+    It produces standard A4 documents conforming to Indian government audit standards:
+    1. Header with GeM procurement reference, bid number, and timestamp.
+    2. Executive Summary Box with overall eligibility verdict, score %, and counts.
+    3. Detailed Clause-by-Clause Audit Table with:
+       - Required vs extracted threshold comparison
+       - Color-coded solid status tags (Compliant, Non-Compliant, Needs Review)
+       - Exact quotation citations with source document name and page number
+       - AI technical justification and officer override records
+    4. Procurement Committee Audit Trail & Administrative Integrity sign-off block.
+"""
+
 import os
-import io
 import datetime
 from typing import Dict, Any, List
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether
-from reportlab.pdfgen import canvas
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
 
 class ReportGenerator:
     """
-    Generates official GeM Compliance Verification PDF Reports.
+    Builds official GeM Bid Compliance Verification PDF Audit Reports.
     """
 
     @classmethod
@@ -21,6 +39,19 @@ class ReportGenerator:
         verdicts: List[Dict[str, Any]],
         output_path: str
     ) -> str:
+        """
+        Renders and writes a PDF compliance report to disk.
+
+        Args:
+            tender (Dict[str, Any]): Tender summary metadata (bid_number, title, organization, etc.).
+            vendor_bid (Dict[str, Any]): Vendor summary scores and status.
+            verdicts (List[Dict[str, Any]]): List of clause-level evaluation outcomes and citations.
+            output_path (str): Destination file path on disk.
+
+        Returns:
+            str: Path to the generated PDF file.
+        """
+        # Configure A4 document layout with 36pt (0.5 in) margins
         doc = SimpleDocTemplate(
             output_path,
             pagesize=A4,
@@ -32,7 +63,9 @@ class ReportGenerator:
 
         styles = getSampleStyleSheet()
         
-        # Custom styles
+        # ----------------------------------------------------------------------
+        # Typography & Color Styles
+        # ----------------------------------------------------------------------
         header_title_style = ParagraphStyle(
             'HeaderTitle',
             parent=styles['Heading1'],
@@ -98,13 +131,21 @@ class ReportGenerator:
 
         story = []
 
-        # --- Header ---
+        # ----------------------------------------------------------------------
+        # Section 1: Government Header & Masthead
+        # ----------------------------------------------------------------------
         story.append(Paragraph("GOVERNMENT e-MARKETPLACE (GeM)", subtitle_style))
         story.append(Paragraph("AI Bid Compliance Verification Report", header_title_style))
-        story.append(Paragraph(f"Tender Bid Number: <b>{tender.get('bid_number')}</b> | Generated: {datetime.datetime.now().strftime('%d-%b-%Y %H:%M')}", subtitle_style))
+        story.append(Paragraph(
+            f"Tender Bid Number: <b>{tender.get('bid_number')}</b> | "
+            f"Generated: {datetime.datetime.now().strftime('%d-%b-%Y %H:%M')}",
+            subtitle_style
+        ))
         story.append(Spacer(1, 12))
 
-        # --- Summary Box ---
+        # ----------------------------------------------------------------------
+        # Section 2: Executive Summary Key-Value Box
+        # ----------------------------------------------------------------------
         status = vendor_bid.get("overall_status", "EVALUATING")
         status_color = "#059669" if status == "COMPLIANT" else ("#DC2626" if status == "NON_COMPLIANT" else "#D97706")
 
@@ -145,7 +186,9 @@ class ReportGenerator:
         story.append(summary_table)
         story.append(Spacer(1, 16))
 
-        # --- Detailed Requirement Verdicts ---
+        # ----------------------------------------------------------------------
+        # Section 3: Detailed Requirement Verdicts Breakdown
+        # ----------------------------------------------------------------------
         story.append(Paragraph("Detailed Compliance Audit by Requirement Clause", section_title_style))
         story.append(Spacer(1, 6))
 
@@ -163,6 +206,7 @@ class ReportGenerator:
             req = v.get("requirement", {})
             clause_title = f"<b>{req.get('clause_no', 'Req')}: {req.get('title', '')}</b>"
             
+            # Use officer manual override status if an override exists
             v_status = v.get("officer_override_status") if v.get("is_overridden") else v.get("status", "NEEDS_VERIFICATION")
             if v_status == "COMPLIANT":
                 status_p = Paragraph("COMPLIANT", badge_compliant)
@@ -204,7 +248,9 @@ class ReportGenerator:
         story.append(verdict_table)
         story.append(Spacer(1, 16))
 
-        # --- Officer Audit Sign-off ---
+        # ----------------------------------------------------------------------
+        # Section 4: Officer Audit Sign-off & Legal Notice
+        # ----------------------------------------------------------------------
         story.append(Paragraph("Procurement Officer Audit Trail & Verification Stamp", section_title_style))
         story.append(Spacer(1, 4))
         audit_note = (
@@ -214,6 +260,6 @@ class ReportGenerator:
         )
         story.append(Paragraph(audit_note, subtitle_style))
 
+        # Build document and save to disk
         doc.build(story)
         return output_path
-

@@ -1,3 +1,23 @@
+"""
+================================================================================
+BidVerify AI — GeM Bid Compliance Verification (SIH26100)
+Sample GeM Dataset & Vendor Document Demonstration Seeder
+================================================================================
+
+Description:
+    This module creates realistic demonstration data for immediate out-of-the-box
+    testing without requiring manual document uploads:
+    1. Pre-seeds 2 realistic GeM Tenders:
+       - GEM/2026/B/894120: Enterprise Cloud Infrastructure & Data Center Hardware (MeitY)
+       - GEM/2026/B/771204: Comprehensive Facility Management & IT Support (NIC)
+    2. Generates realistic supporting text documents on disk under /backend/uploads/sample_vendors/
+    3. Seeds 3 vendor bidders demonstrating distinct compliance outcomes:
+       - AlphaTech Solutions Pvt Ltd   : 100% Compliant (Exceeds all financial, experience, ISO, GST, MII rules)
+       - Bharat Digital Networks Ltd   : Non-Compliant (Shortfall on turnover ₹4.2 Cr vs ₹10 Cr, expired ISO)
+       - CyberCore Systems LLP         : Needs Review (Provisional turnover statement & experience clarification)
+    4. Evaluates all requirements and attaches full evidence citations and confidence scores.
+"""
+
 import os
 import json
 import datetime
@@ -7,16 +27,28 @@ from app.services.document_processor import DocumentProcessor
 from app.services.compliance_engine import ComplianceEngine
 from app.database import UPLOADS_DIR
 
+# Root folder for pre-seeded demonstration files
 SAMPLE_DOCS_DIR = os.path.join(UPLOADS_DIR, "sample_vendors")
 os.makedirs(SAMPLE_DOCS_DIR, exist_ok=True)
 
+
 def generate_sample_file_content():
-    """Creates realistic sample text and PDF documents for demonstration."""
-    
-    # 1. AlphaTech (Compliant) Documents
+    """
+    Generates realistic vendor supporting documents on disk for:
+    - AlphaTech Solutions (Compliant)
+    - Bharat Digital Networks (Non-Compliant)
+    - CyberCore Systems (Needs Verification)
+
+    Returns:
+        Dict[str, List[str]]: Mapping of vendor key to file paths.
+    """
+    # --------------------------------------------------------------------------
+    # 1. AlphaTech Solutions Documents (100% Compliant Bidder)
+    # --------------------------------------------------------------------------
     alpha_dir = os.path.join(SAMPLE_DOCS_DIR, "AlphaTech_Solutions")
     os.makedirs(alpha_dir, exist_ok=True)
 
+    # Audited CA Turnover Certificate
     alpha_financial_path = os.path.join(alpha_dir, "Audited_Financial_Statement_FY24.txt")
     with open(alpha_financial_path, "w", encoding="utf-8") as f:
         f.write("""M/S ALPHATECH SOLUTIONS PRIVATE LIMITED
@@ -43,6 +75,7 @@ Date: 15-May-2024
 Place: New Delhi
 """)
 
+    # ISO 9001:2015 Quality Management Certificate
     alpha_iso_path = os.path.join(alpha_dir, "ISO_9001_Quality_Certificate.txt")
     with open(alpha_iso_path, "w", encoding="utf-8") as f:
         f.write("""INTERNATIONAL ACCREDITATION SERVICES & CERTIFICATION BOARD
@@ -65,6 +98,7 @@ Expiry Date: 11-August-2027 (Valid and Active)
 Accreditation Body: NABCB / IAF Member Body
 """)
 
+    # Experience Statement & Past Client Completion Orders
     alpha_experience_path = os.path.join(alpha_dir, "Experience_and_Client_Credentials.txt")
     with open(alpha_experience_path, "w", encoding="utf-8") as f:
         f.write("""ALPHATECH SOLUTIONS PRIVATE LIMITED
@@ -87,6 +121,7 @@ Past Executed Contracts in Last 5 Years:
 Authorized Signatory: Vikramaditya Verma (Managing Director)
 """)
 
+    # Statutory Registrations & Legal Declarations (GST, PAN, MII, Clean Affidavit)
     alpha_legal_path = os.path.join(alpha_dir, "Statutory_GST_PAN_MII_Undertaking.txt")
     with open(alpha_legal_path, "w", encoding="utf-8") as f:
         f.write("""STATUTORY REGISTRATIONS AND MANDATORY DECLARATIONS
@@ -111,10 +146,13 @@ Authorized Signatory: Vikramaditya Verma
 Stamp & Seal of Company
 """)
 
-    # 2. Bharat Digital (Non-Compliant: Turnover ₹4.2 Cr vs ₹10 Cr, ISO expired)
+    # --------------------------------------------------------------------------
+    # 2. Bharat Digital Networks Documents (Deficient Turnover & Expired ISO)
+    # --------------------------------------------------------------------------
     bharat_dir = os.path.join(SAMPLE_DOCS_DIR, "Bharat_Digital_Networks")
     os.makedirs(bharat_dir, exist_ok=True)
 
+    # Deficient Turnover (₹4.2 Cr vs Required ₹10 Cr)
     bharat_financial_path = os.path.join(bharat_dir, "Audited_Turnover_FY24.txt")
     with open(bharat_financial_path, "w", encoding="utf-8") as f:
         f.write("""BHARAT DIGITAL NETWORKS LIMITED
@@ -133,6 +171,7 @@ Net Worth: ₹ 1.80 Crores.
 UDIN: 24055219BCDEFA1298
 """)
 
+    # Expired ISO Certificate
     bharat_iso_path = os.path.join(bharat_dir, "ISO_Certification.txt")
     with open(bharat_iso_path, "w", encoding="utf-8") as f:
         f.write("""GLOBAL STANDARDS CERTIFICATION
@@ -157,7 +196,9 @@ Non-Blacklisting Declaration: Bidder confirms clean track record with no debarme
 Make in India Local Content: 45% Local Content (Class-II Supplier).
 """)
 
-    # 3. CyberCore Systems (Needs Verification: Ambiguous Turnover stamp & experience duration)
+    # --------------------------------------------------------------------------
+    # 3. CyberCore Systems Documents (Needs Verification / Clarification)
+    # --------------------------------------------------------------------------
     cyber_dir = os.path.join(SAMPLE_DOCS_DIR, "CyberCore_Systems")
     os.makedirs(cyber_dir, exist_ok=True)
 
@@ -191,16 +232,19 @@ Make in India content: Declared 55% local value addition.
 
 
 def seed_sample_database(db: Session):
-    """Populates initial sample GeM tenders, requirements, and vendor bids with AI evaluations."""
-    
-    # Check if tender already exists
+    """
+    Populates initial sample GeM tenders, requirements, and vendor bids with AI evaluations.
+    """
+    # Prevent duplicate seeding if data is already present
     existing = db.query(Tender).filter(Tender.bid_number == "GEM/2026/B/894120").first()
     if existing:
         return
 
     print("[Seed] Creating GeM Sample Tenders and Requirements...")
 
-    # Tender 1: Cloud & IT Hardware Infrastructure
+    # --------------------------------------------------------------------------
+    # Tender 1: Cloud & IT Hardware Infrastructure (MeitY)
+    # --------------------------------------------------------------------------
     tender1 = Tender(
         bid_number="GEM/2026/B/894120",
         title="Supply, Installation & Maintenance of Enterprise Cloud Infrastructure & Data Center Hardware",
@@ -213,7 +257,7 @@ def seed_sample_database(db: Session):
     db.add(tender1)
     db.flush()
 
-    # Requirements for Tender 1
+    # Criteria Clauses for Tender 1
     reqs_t1 = [
         Requirement(
             tender_id=tender1.id,
@@ -292,7 +336,9 @@ def seed_sample_database(db: Session):
         db.add(r)
     db.flush()
 
-    # Tender 2: Facility Management Services
+    # --------------------------------------------------------------------------
+    # Tender 2: Facility Management Services (NIC)
+    # --------------------------------------------------------------------------
     tender2 = Tender(
         bid_number="GEM/2026/B/771204",
         title="Comprehensive Annual Maintenance & Facility Management Services for Data Center Operations",
@@ -344,10 +390,12 @@ def seed_sample_database(db: Session):
         db.add(r)
     db.flush()
 
-    # Generate sample documents on disk
+    # Generate documents on disk
     doc_paths = generate_sample_file_content()
 
-    # Create Vendor 1: AlphaTech Solutions (Compliant)
+    # --------------------------------------------------------------------------
+    # Seed Vendor 1: AlphaTech Solutions (Compliant)
+    # --------------------------------------------------------------------------
     v1 = VendorBid(
         tender_id=tender1.id,
         vendor_name="AlphaTech Solutions Pvt Ltd",
@@ -359,7 +407,6 @@ def seed_sample_database(db: Session):
     db.add(v1)
     db.flush()
 
-    # Process and attach documents for Vendor 1
     v1_all_chunks = []
     for fpath in doc_paths["alpha"]:
         fname = os.path.basename(fpath)
@@ -378,10 +425,11 @@ def seed_sample_database(db: Session):
         db.add(d)
     db.flush()
 
-    # Run Compliance Engine on Vendor 1
     _evaluate_and_record_verdicts(db, v1, reqs_t1, v1_all_chunks)
 
-    # Create Vendor 2: Bharat Digital Networks (Non-Compliant)
+    # --------------------------------------------------------------------------
+    # Seed Vendor 2: Bharat Digital Networks (Non-Compliant)
+    # --------------------------------------------------------------------------
     v2 = VendorBid(
         tender_id=tender1.id,
         vendor_name="Bharat Digital Networks Ltd",
@@ -413,7 +461,9 @@ def seed_sample_database(db: Session):
 
     _evaluate_and_record_verdicts(db, v2, reqs_t1, v2_all_chunks)
 
-    # Create Vendor 3: CyberCore Systems (Needs Verification)
+    # --------------------------------------------------------------------------
+    # Seed Vendor 3: CyberCore Systems (Needs Verification)
+    # --------------------------------------------------------------------------
     v3 = VendorBid(
         tender_id=tender1.id,
         vendor_name="CyberCore Systems LLP",
@@ -445,7 +495,9 @@ def seed_sample_database(db: Session):
 
     _evaluate_and_record_verdicts(db, v3, reqs_t1, v3_all_chunks)
 
-    # Add default system settings
+    # --------------------------------------------------------------------------
+    # Seed Default System Settings
+    # --------------------------------------------------------------------------
     default_settings = [
         ("llm_provider", "smart_mock"),
         ("ocr_mode", "hybrid"),
@@ -461,7 +513,9 @@ def seed_sample_database(db: Session):
 
 
 def _evaluate_and_record_verdicts(db: Session, vendor: VendorBid, requirements: list, chunks: list):
-    """Helper to evaluate and calculate vendor summary counts."""
+    """
+    Helper function to evaluate all clauses for a vendor and persist ComplianceVerdict records.
+    """
     comp = 0
     non_comp = 0
     needs_rev = 0
@@ -524,4 +578,3 @@ def _evaluate_and_record_verdicts(db: Session, vendor: VendorBid, requirements: 
 
     vendor.last_evaluated_at = datetime.datetime.utcnow()
     vendor.verification_summary = f"AI Audit: {comp}/{total} Compliant, {non_comp} Non-Compliant, {needs_rev} Under Review."
-

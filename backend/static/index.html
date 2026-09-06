@@ -1,14 +1,42 @@
 <!DOCTYPE html>
+<!--
+================================================================================
+BidVerify AI — Government e-Marketplace (GeM) Verification Portal (SIH26100)
+Main Web Interface Shell, Styling Tokens & Accessibility Framework
+================================================================================
+
+Description:
+  This HTML document provides the formal host shell for the BidVerify AI Single-Page
+  Application (SPA). It implements the official Indian Government (gov.in / GeM / NIC)
+  design system:
+  1. Indian Tricolor branding ribbon (#FF9933 Saffron, White, #138808 Green).
+  2. Tricolour-Themed Button Hierarchy (Primary Saffron, Positive Green, Outline Navy, Danger Red).
+  3. Accessibility Controls: Working "Skip to Main Content" link, active text-resizing (A- / A / A+),
+     and Dark / High-Contrast Mode toggle.
+  4. Dense data tables with navy headers (#0B3D91), zebra striping, and 1px visible borders.
+  5. High-contrast solid rectangular status tags.
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Government e-Marketplace (GeM) | AI Bid Compliance Verification Portal (SIH26100)</title>
   
-  <!-- Tailwind CSS CDN -->
+  <!-- Tailwind CSS Framework CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
+    /*
+      Tailwind CSS Custom Design Tokens
+      Defines the official Indian Government & GeM color palette:
+      - Primary Navy: #0B3D91
+      - National Saffron: #FF9933
+      - National Green: #138808
+      - Official Danger Red: #C51C1C
+      - Official Amber: #D97706
+      - Portal Background: #F5F5F5
+    */
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
           colors: {
@@ -64,10 +92,12 @@
     }
   </script>
 
-  <!-- Google Fonts: Noto Sans & Roboto -->
+  <!-- Google Fonts: Noto Sans (Official Indian Government Font) & Roboto -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=Roboto:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- React 18 & Babel for standalone compilation -->
@@ -76,6 +106,7 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
+    /* Dynamic Font Scale Variable for Accessibility A- / A / A+ buttons */
     :root {
       --gov-font-scale: 1;
     }
@@ -85,20 +116,21 @@
       color: #1F2937;
       font-size: calc(14px * var(--gov-font-scale));
       line-height: 1.5;
+      transition: background-color 0.2s ease, color 0.2s ease;
     }
     
-    /* Strict Government Portal Aesthetics */
+    /* Strict Government Portal Aesthetics (No rounded pill cards or modern SaaS drop-shadows) */
     * {
       border-radius: 0px !important;
       box-shadow: none !important;
     }
     
-    /* Allow minor 2px radius on specific buttons/inputs */
+    /* Minimal 2px radius on buttons/inputs for clean structural alignment */
     button, input, select, textarea, .gov-tag {
       border-radius: 2px !important;
     }
 
-    /* Tricolor ribbon */
+    /* Indian National Tricolor Ribbon Strips */
     .tricolor-bar {
       height: 4px;
       width: 100%;
@@ -111,10 +143,10 @@
     }
 
     /* ========================================================================= */
-    /* TRICOLOUR-THEMED BUTTON SYSTEM */
+    /* TRICOLOUR-THEMED BUTTON HIERARCHY */
     /* ========================================================================= */
     
-    /* 1. Primary Action Button (Saffron #FF9933 with Navy Text & Subtle Tricolor Bottom Border) */
+    /* 1. Primary Action Button: Saffron #FF9933 with Dark Navy text & Green accent border */
     .gov-btn-primary {
       background-color: #FF9933 !important;
       color: #061C48 !important;
@@ -140,7 +172,7 @@
       cursor: not-allowed !important;
     }
 
-    /* 2. Secondary/Confirm Positive Button (Solid Green #138808 with White Text) */
+    /* 2. Secondary Positive / Confirmation Button: Solid Green #138808 with White text */
     .gov-btn-secondary {
       background-color: #138808 !important;
       color: #FFFFFF !important;
@@ -160,7 +192,7 @@
       background-color: #0D6E05 !important;
     }
 
-    /* 3. Tertiary / Neutral Outline Button (Navy Outline #0B3D91 with White Background) */
+    /* 3. Tertiary / Neutral Outline Button: Navy #0B3D91 Outline with White background */
     .gov-btn-neutral {
       background-color: #FFFFFF !important;
       color: #0B3D91 !important;
@@ -197,7 +229,7 @@
       background-color: #991B1B !important;
     }
 
-    /* Accessible Skip Link */
+    /* Accessible Skip Navigation Link */
     .skip-link {
       position: absolute;
       top: -40px;
@@ -215,7 +247,7 @@
       outline: 2px solid #FF9933;
     }
 
-    /* Formal Government Section Headings */
+    /* Formal Government Section Headings with Navy Underline */
     .gov-section-heading {
       color: #0B3D91;
       font-weight: 700;
@@ -230,7 +262,7 @@
       justify-content: space-between;
     }
 
-    /* Government Callout Boxes (Gazette / Notice Board style) */
+    /* Government Notice Callout Boxes */
     .gov-callout {
       border: 1px solid #D1D5DB;
       border-left: 4px solid #0B3D91;
@@ -256,7 +288,7 @@
       padding: 12px 16px;
     }
 
-    /* Formal Table Styling */
+    /* Formal Government Data Tables */
     .gov-table {
       width: 100%;
       border-collapse: collapse;
@@ -292,7 +324,7 @@
       outline-offset: 2px !important;
     }
 
-    /* Custom scrollbar */
+    /* Custom Dense Scrollbar */
     .custom-scrollbar::-webkit-scrollbar {
       width: 6px;
       height: 6px;
@@ -303,15 +335,288 @@
     .custom-scrollbar::-webkit-scrollbar-thumb {
       background: #9CA3AF;
     }
+
+    /* ========================================================================= */
+    /* 3D POPULAR PRODUCT CATEGORIES INTERACTIVE SYSTEM                          */
+    /* ========================================================================= */
+    .gem-category-grid {
+      perspective: 1200px;
+    }
+    .gem-category-card-3d {
+      transform-style: preserve-3d;
+      transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2), box-shadow 0.35s ease, border-color 0.25s ease;
+      border: 1px solid #D1D5DB;
+      background: #FFFFFF;
+      position: relative;
+      cursor: pointer;
+      will-change: transform;
+    }
+    .gem-category-card-3d:hover {
+      transform: perspective(1000px) translateY(-10px) scale(1.03) rotateX(3deg) rotateY(-2deg) !important;
+      box-shadow: 0 16px 32px -8px rgba(11, 61, 145, 0.22), 0 0 0 2px #FF9933 !important;
+      border-color: #FF9933 !important;
+      z-index: 20;
+    }
+    .gem-category-img-container {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%);
+      height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .gem-category-img {
+      transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), filter 0.3s ease;
+      transform-origin: center center;
+    }
+    .gem-category-card-3d:hover .gem-category-img {
+      transform: scale(1.18) translateY(-4px) !important;
+      filter: drop-shadow(0 12px 16px rgba(0, 0, 0, 0.22));
+    }
+    .gem-category-badge-floating {
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12) !important;
+    }
+    .gem-category-glow-bar {
+      height: 3px;
+      width: 100%;
+      background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .gem-category-card-3d:hover .gem-category-glow-bar {
+      opacity: 1;
+    }
+
+    body.dark .gem-category-card-3d {
+      background: #111C38 !important;
+      border-color: #2D3D60 !important;
+    }
+    body.dark .gem-category-card-3d:hover {
+      box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.7), 0 0 0 2px #FF9933 !important;
+      border-color: #FF9933 !important;
+    }
+    body.dark .gem-category-img-container {
+      background: linear-gradient(135deg, #162447 0%, #0E1A38 100%) !important;
+    }
+
+    /* Criteria Inspection Modal Boxes */
+    .gem-criteria-box {
+      border: 1px solid #D1D5DB;
+      background: #FAFAFA;
+      transition: all 0.2s ease;
+    }
+    .gem-criteria-box:hover {
+      border-color: #0B3D91;
+      background: #FFFFFF;
+      box-shadow: 0 4px 12px rgba(11, 61, 145, 0.08);
+    }
+    body.dark .gem-criteria-box {
+      background: #132040 !important;
+      border-color: #2D3D60 !important;
+    }
+    body.dark .gem-criteria-box:hover {
+      border-color: #60A5FA !important;
+      background: #18284F !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    /* ========================================================================= */
+    /* OFFICIAL DARK / HIGH-CONTRAST MODE DESIGN SYSTEM                          */
+    /* ========================================================================= */
+    body.dark {
+      background-color: #0B1329 !important;
+      color: #F8FAFC !important;
+    }
+    body.dark .bg-white {
+      background-color: #111C38 !important;
+      color: #F8FAFC !important;
+      border-color: #2D3D60 !important;
+    }
+    body.dark .bg-\[\#F5F5F5\] {
+      background-color: #0B1329 !important;
+    }
+    body.dark .bg-\[\#FAFAFA\],
+    body.dark .bg-\[\#F9FAFB\],
+    body.dark .bg-\[\#F1F5F9\] {
+      background-color: #162447 !important;
+      border-color: #2D3D60 !important;
+    }
+    body.dark .bg-\[\#E5E7EB\] {
+      background-color: #0E1A38 !important;
+      border-color: #2D3D60 !important;
+      color: #CBD5E1 !important;
+    }
+    body.dark .bg-gray-100 {
+      background-color: #1F3057 !important;
+      color: #F8FAFC !important;
+      border-color: #2D3D60 !important;
+    }
+    body.dark header {
+      background-color: #111C38 !important;
+      border-color: #2D3D60 !important;
+    }
+    body.dark .text-gray-900,
+    body.dark .text-gray-800,
+    body.dark .text-\[\#1F2937\],
+    body.dark .text-\[\#374151\] {
+      color: #F8FAFC !important;
+    }
+    body.dark .text-gray-700,
+    body.dark .text-gray-600 {
+      color: #CBD5E1 !important;
+    }
+    body.dark .text-gray-500,
+    body.dark .text-gray-400 {
+      color: #94A3B8 !important;
+    }
+    body.dark .text-\[\#0B3D91\] {
+      color: #60A5FA !important;
+    }
+    body.dark input,
+    body.dark select,
+    body.dark textarea {
+      background-color: #0B1329 !important;
+      color: #F8FAFC !important;
+      border-color: #3B4E76 !important;
+    }
+    body.dark input::placeholder,
+    body.dark textarea::placeholder {
+      color: #64748B !important;
+    }
+    body.dark .border-\[\#D1D5DB\],
+    body.dark .border-\[\#E5E7EB\],
+    body.dark .border-\[\#9CA3AF\],
+    body.dark .border-gray-200,
+    body.dark .border-gray-300 {
+      border-color: #2D3D60 !important;
+    }
+    body.dark .gov-table {
+      border-color: #2D3D60 !important;
+    }
+    body.dark .gov-table th {
+      background-color: #0F275A !important;
+      border-color: #1E3A8A !important;
+      color: #FFFFFF !important;
+    }
+    body.dark .gov-table td {
+      border-color: #2D3D60 !important;
+      color: #F1F5F9 !important;
+    }
+    body.dark .gov-table tr:nth-child(even) {
+      background-color: #132040 !important;
+    }
+    body.dark .gov-table tr:hover {
+      background-color: #1A2B56 !important;
+    }
+    body.dark .gov-section-heading {
+      color: #60A5FA !important;
+      border-bottom-color: #3B82F6 !important;
+    }
+    body.dark .gov-callout {
+      background-color: #111C38 !important;
+      border-color: #2D3D60 !important;
+      border-left-color: #38BDF8 !important;
+      color: #F8FAFC !important;
+    }
+    body.dark .gov-callout-warning {
+      background-color: #381A05 !important;
+      border-color: #78350F !important;
+      border-left-color: #F59E0B !important;
+      color: #FEF3C7 !important;
+    }
+    body.dark .gov-callout-danger {
+      background-color: #3A0B0B !important;
+      border-color: #7F1D1D !important;
+      border-left-color: #EF4444 !important;
+      color: #FEE2E2 !important;
+    }
+    body.dark .gov-callout-success {
+      background-color: #062814 !important;
+      border-color: #14532D !important;
+      border-left-color: #22C55E !important;
+      color: #DCFCE7 !important;
+    }
+    body.dark .gov-btn-neutral {
+      background-color: #111C38 !important;
+      color: #93C5FD !important;
+      border-color: #3B82F6 !important;
+    }
+    body.dark .gov-btn-neutral:hover:not(:disabled) {
+      background-color: #1F3057 !important;
+      color: #BFDBFE !important;
+    }
+    body.dark .bg-blue-100 {
+      background-color: #1E3A8A !important;
+      color: #BFDBFE !important;
+      border-color: #3B82F6 !important;
+    }
+    body.dark .bg-indigo-100 {
+      background-color: #312E81 !important;
+      color: #C7D2FE !important;
+      border-color: #6366F1 !important;
+    }
+    body.dark .bg-emerald-100 {
+      background-color: #064E3B !important;
+      color: #A7F3D0 !important;
+      border-color: #10B981 !important;
+    }
+    body.dark .bg-purple-100 {
+      background-color: #581C87 !important;
+      color: #E9D5FF !important;
+      border-color: #A855F7 !important;
+    }
+    body.dark .bg-amber-100 {
+      background-color: #78350F !important;
+      color: #FDE68A !important;
+      border-color: #F59E0B !important;
+    }
+    body.dark .bg-red-100 {
+      background-color: #7F1D1D !important;
+      color: #FECACA !important;
+      border-color: #EF4444 !important;
+    }
+    body.dark .bg-green-100 {
+      background-color: #14532D !important;
+      color: #BBF7D0 !important;
+      border-color: #22C55E !important;
+    }
+    body.dark .bg-\[\#F0FDF4\] {
+      background-color: #062814 !important;
+      border-color: #14532D !important;
+    }
+    body.dark .bg-\[\#FEF2F2\] {
+      background-color: #3A0B0B !important;
+      border-color: #7F1D1D !important;
+    }
+    body.dark .bg-\[\#FFFBEB\] {
+      background-color: #381A05 !important;
+      border-color: #78350F !important;
+    }
+    body.dark .bg-\[\#EFF6FF\] {
+      background-color: #0E1E42 !important;
+      border-color: #1D4ED8 !important;
+    }
+    body.dark .bg-\[\#FAF5FF\] {
+      background-color: #2A1145 !important;
+      border-color: #7E22CE !important;
+    }
+    body.dark .custom-scrollbar::-webkit-scrollbar-track {
+      background: #0B1329;
+    }
+    body.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #334155;
+    }
   </style>
 </head>
 <body class="custom-scrollbar">
-  <!-- Accessible Skip Navigation -->
+  <!-- Accessible Skip Navigation Link (Keyboard Navigation) -->
   <a href="#main-content" class="skip-link">Skip to Main Content</a>
 
+  <!-- Mount Point for React 18 Application Root -->
   <div id="root"></div>
 
-  <!-- React Application Source -->
+  <!-- React 18 Application Logic Source -->
   <script type="text/babel" src="/static/app.js"></script>
 </body>
 </html>

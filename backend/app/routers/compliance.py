@@ -1,3 +1,16 @@
+"""
+================================================================================
+BidVerify AI — GeM Bid Compliance Verification (SIH26100)
+Compliance Verification, Officer Override & PDF Report REST API Router
+================================================================================
+
+Description:
+    This router implements governance, auditability, and formal reporting features:
+    1. POST /api/compliance/override            : Procurement Officer manual override with mandatory audit logging.
+    2. POST /api/compliance/revert-override/{id}: Revert manual override back to original AI determination.
+    3. GET  /api/compliance/report/{id}/pdf     : Generate and download official print-ready GeM PDF audit reports.
+"""
+
 import os
 import datetime
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,28 +21,43 @@ from app.models import Tender, Requirement, VendorBid, ComplianceVerdict
 from app.schemas import OfficerOverrideRequest, ComplianceVerdictOut
 from app.services.report_generator import ReportGenerator
 
+# Initialize sub-router with '/api/compliance' prefix
 router = APIRouter(prefix="/api/compliance", tags=["Compliance & Audit"])
 
 
+# ------------------------------------------------------------------------------
+# 1. Procurement Officer Manual Override with Mandatory Audit Trail
+# ------------------------------------------------------------------------------
 @router.post("/override", response_model=ComplianceVerdictOut)
 def submit_officer_override(payload: OfficerOverrideRequest, db: Session = Depends(get_db)):
     """
-    Allows a procurement officer to manually override any AI verdict with audit logging.
+    Enables a procurement officer or technical evaluation committee member to
+    override an automated AI verdict (e.g. marking a clause Compliant or Disqualified).
+
+    Mandatory Governance Rules:
+    - Overriding officer's designation must be recorded.
+    - An explanatory justification comment is mandatory for public auditability.
+    - Timestamp is recorded in UTC.
+    - Vendor summary scores and overall eligibility are recalculated automatically.
     """
     verdict = db.query(ComplianceVerdict).filter(ComplianceVerdict.id == payload.verdict_id).first()
     if not verdict:
         raise HTTPException(status_code=404, detail="Verdict record not found")
 
     if payload.override_status not in ["COMPLIANT", "NON_COMPLIANT", "NEEDS_VERIFICATION"]:
-        raise HTTPException(status_code=400, detail="Invalid override status. Must be COMPLIANT, NON_COMPLIANT, or NEEDS_VERIFICATION")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid override status. Must be COMPLIANT, NON_COMPLIANT, or NEEDS_VERIFICATION"
+        )
 
+    # Record Officer Override in Audit Trail
     verdict.is_overridden = True
     verdict.officer_override_status = payload.override_status
     verdict.officer_name = payload.officer_name or "Procurement Officer (GeM)"
     verdict.officer_comment = payload.officer_comment
-    verdict.officer_timestamp = datetime.datetime.utcnow()
+    verdict.officer_timestamp = datetime.datetime.now(datetime.timezone.utc)
 
-    # Recalculate vendor bid overall status and counts
+    # Recalculate vendor proposal totals taking into account the new active override
     vendor = db.query(VendorBid).filter(VendorBid.id == verdict.vendor_bid_id).first()
     if vendor:
         all_verdicts = db.query(ComplianceVerdict).filter(ComplianceVerdict.vendor_bid_id == vendor.id).all()
@@ -53,6 +81,7 @@ def submit_officer_override(payload: OfficerOverrideRequest, db: Session = Depen
         score = (comp / total * 100.0) if total > 0 else 0.0
         vendor.compliance_score = round(score, 1)
 
+        # Update overall status based on effective verdicts
         if non_comp > 0:
             vendor.overall_status = "NON_COMPLIANT"
         elif needs_rev > 0:
@@ -65,13 +94,20 @@ def submit_officer_override(payload: OfficerOverrideRequest, db: Session = Depen
     return verdict
 
 
+# ------------------------------------------------------------------------------
+# 2. Revert Officer Override Back to AI Verdict
+# ------------------------------------------------------------------------------
 @router.post("/revert-override/{verdict_id}", response_model=ComplianceVerdictOut)
 def revert_officer_override(verdict_id: int, db: Session = Depends(get_db)):
-    """Reverts an officer override back to the original AI decision."""
+    """
+    Reverts an officer override, restoring the original automated AI decision
+    and recalculating vendor summary metrics.
+    """
     verdict = db.query(ComplianceVerdict).filter(ComplianceVerdict.id == verdict_id).first()
     if not verdict:
         raise HTTPException(status_code=404, detail="Verdict record not found")
 
+    # Clear officer override fields
     verdict.is_overridden = False
     verdict.officer_override_status = None
     verdict.officer_name = None
@@ -114,8 +150,18 @@ def revert_officer_override(verdict_id: int, db: Session = Depends(get_db)):
     return verdict
 
 
+# ------------------------------------------------------------------------------
+# 3. Export Official GeM Compliance Audit PDF Report
+# ------------------------------------------------------------------------------
 @router.get("/report/{vendor_id}/pdf")
 def download_pdf_report(vendor_id: int, db: Session = Depends(get_db)):
+    """
+    Builds and downloads a formal, print-ready PDF Compliance Audit Report:
+    - Tricolor header and official GeM audit masthead.
+    - Executive summary box with score percentage and overall verdict.
+    - Clause-by-clause breakdown with exact quotation citations and page numbers.
+    - Officer override audit stamps with justifications.
+    """
     vendor = db.query(VendorBid).filter(VendorBid.id == vendor_id).first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor bid not found")
@@ -126,7 +172,7 @@ def download_pdf_report(vendor_id: int, db: Session = Depends(get_db)):
 
     verdicts = db.query(ComplianceVerdict).filter(ComplianceVerdict.vendor_bid_id == vendor.id).all()
     
-    # Format verdicts data with requirement details
+    # Format verdicts dictionary for ReportLab renderer
     verdict_list = []
     for v in verdicts:
         req = db.query(Requirement).filter(Requirement.id == v.requirement_id).first()
@@ -153,6 +199,7 @@ def download_pdf_report(vendor_id: int, db: Session = Depends(get_db)):
     pdf_filename = f"GeM_Bid_Compliance_Report_{vendor.id}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     pdf_path = os.path.join(REPORTS_DIR, pdf_filename)
 
+    # Generate PDF using ReportLab
     ReportGenerator.generate_pdf_report(
         tender={
             "bid_number": tender.bid_number,
@@ -178,4 +225,3 @@ def download_pdf_report(vendor_id: int, db: Session = Depends(get_db)):
         media_type="application/pdf",
         filename=pdf_filename
     )
-

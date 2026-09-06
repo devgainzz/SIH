@@ -1,23 +1,39 @@
+"""
+================================================================================
+BidVerify AI — GeM Bid Compliance Verification (SIH26100)
+Document Ingestion, OCR & Page-Level Text Chunking Pipeline
+================================================================================
+
+Description:
+    This service handles the automated extraction and segmentation of unstructured
+    vendor bid submissions. It supports:
+    1. Native PDF text extraction using PyMuPDF (fitz) with exact page number tracking.
+    2. OCR fallback for scanned images and non-searchable PDFs (Pillow + pytesseract).
+    3. Microsoft Word (.docx / .doc) extraction with paragraph and table parsing.
+    4. Plain text (.txt, .md, .csv, .json) processing.
+    5. Semantic text chunking with page number metadata for accurate RAG citations.
+"""
+
 import os
 import json
 import re
 from typing import List, Dict, Any, Tuple
 
-# Try importing pymupdf
+# Attempt import of PyMuPDF for native high-speed PDF text parsing
 try:
     import pymupdf as fitz
     PYMUPDF_AVAILABLE = True
 except ImportError:
     PYMUPDF_AVAILABLE = False
 
-# Try importing docx
+# Attempt import of python-docx for Microsoft Word documents
 try:
     import docx
     DOCX_AVAILABLE = True
 except ImportError:
     DOCX_AVAILABLE = False
 
-# Try importing PIL and pytesseract
+# Attempt import of Pillow and pytesseract for scanned OCR fallback
 try:
     from PIL import Image
     import pytesseract
@@ -27,6 +43,15 @@ except ImportError:
 
 
 class DocumentChunk:
+    """
+    Represents an isolated, indexed text chunk from a specific document page.
+
+    Attributes:
+        chunk_id (int): Unique numeric sequence index.
+        document_name (str): Source document file name.
+        page_number (int): 1-indexed page number where this text appears.
+        text (str): Extracted paragraph or tabular text content.
+    """
     def __init__(self, chunk_id: int, document_name: str, page_number: int, text: str):
         self.chunk_id = chunk_id
         self.document_name = document_name
@@ -34,6 +59,7 @@ class DocumentChunk:
         self.text = text.strip()
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serializes chunk object into a dictionary for JSON database storage."""
         return {
             "chunk_id": self.chunk_id,
             "document_name": self.document_name,
@@ -45,13 +71,23 @@ class DocumentChunk:
 
 class DocumentProcessor:
     """
-    Extracts text, metadata, and page-level chunks from PDF, DOCX, TXT, and scanned image files.
+    High-level document processing pipeline for heterogeneous tender bid submissions.
     """
 
     @classmethod
     def process_file(cls, file_path: str, filename: str) -> Tuple[int, List[Dict[str, Any]], str]:
         """
-        Processes a file and returns: (page_count, chunks_list, full_text)
+        Main entrypoint: Routes a file to the appropriate format extractor.
+
+        Args:
+            file_path (str): Absolute path to the uploaded file on disk.
+            filename (str): Name of the file.
+
+        Returns:
+            Tuple[int, List[Dict[str, Any]], str]:
+                - Total page count detected
+                - List of serialized DocumentChunk dictionaries with page metadata
+                - Complete concatenated plain text
         """
         ext = os.path.splitext(filename)[1].lower()
         
@@ -64,11 +100,15 @@ class DocumentProcessor:
         elif ext in [".txt", ".md", ".csv", ".json"]:
             return cls._process_text_file(file_path, filename)
         else:
-            # Attempt plain text read as fallback
+            # Fallback to general plain text reader
             return cls._process_text_file(file_path, filename)
 
     @classmethod
     def _process_pdf(cls, file_path: str, filename: str) -> Tuple[int, List[Dict[str, Any]], str]:
+        """
+        Extracts text from PDF documents page by page using PyMuPDF.
+        If a page contains sparse/scanned content, automatically runs OCR fallback.
+        """
         chunks = []
         full_text_parts = []
         page_count = 0
@@ -83,7 +123,7 @@ class DocumentProcessor:
                     page_num = page_idx + 1
                     page_text = page.get_text("text")
 
-                    # If page text is very sparse or empty, check if OCR is needed
+                    # If page text is very sparse (< 30 chars), run OCR if available
                     if len(page_text.strip()) < 30 and OCR_AVAILABLE:
                         ocr_text = cls._ocr_pdf_page(page)
                         if len(ocr_text.strip()) > len(page_text.strip()):
@@ -94,7 +134,7 @@ class DocumentProcessor:
 
                     full_text_parts.append(f"--- [Page {page_num}] ---\n{page_text}")
                     
-                    # Split page into coherent paragraph chunks
+                    # Split page into semantically bounded paragraph chunks
                     page_chunks = cls._chunk_page_text(page_text, filename, page_num, chunk_id_counter)
                     for ch in page_chunks:
                         chunks.append(ch.to_dict())
@@ -103,10 +143,10 @@ class DocumentProcessor:
                 doc.close()
                 return max(1, page_count), chunks, "\n\n".join(full_text_parts)
             except Exception as e:
-                # If PyMuPDF fails or file is raw text
+                # If PyMuPDF encounters an unreadable stream, fall through to text fallback
                 pass
 
-        # Fallback if PyMuPDF not available or failed
+        # Text fallback if PyMuPDF not available or file is plain text stream
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 raw_text = f.read()
@@ -118,7 +158,9 @@ class DocumentProcessor:
 
     @classmethod
     def _ocr_pdf_page(cls, page) -> str:
-        """Render PDF page as pixmap and run OCR via pytesseract if available."""
+        """
+        Renders a PDF page as a high-DPI pixmap image and applies Tesseract OCR.
+        """
         if not OCR_AVAILABLE:
             return ""
         try:
@@ -131,6 +173,9 @@ class DocumentProcessor:
 
     @classmethod
     def _process_docx(cls, file_path: str, filename: str) -> Tuple[int, List[Dict[str, Any]], str]:
+        """
+        Extracts text from Microsoft Word (.docx) files, parsing paragraphs and tables.
+        """
         chunks = []
         paragraphs = []
         chunk_id = 1
@@ -141,6 +186,7 @@ class DocumentProcessor:
                 for p in doc.paragraphs:
                     if p.text.strip():
                         paragraphs.append(p.text.strip())
+                # Extract text from embedded tables
                 for table in doc.tables:
                     for row in table.rows:
                         row_cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
@@ -154,11 +200,11 @@ class DocumentProcessor:
                 paragraphs = [f.read()]
 
         full_text = "\n\n".join(paragraphs)
-        # Approximate 400 words per page
+        # Approximate 400 words per page for DOCX pagination
         words = full_text.split()
         page_count = max(1, (len(words) // 400) + 1)
 
-        # Create chunks
+        # Assemble chunks with approximate page tracking
         current_chunk = []
         current_page = 1
         current_word_count = 0
@@ -185,6 +231,9 @@ class DocumentProcessor:
 
     @classmethod
     def _process_image(cls, file_path: str, filename: str) -> Tuple[int, List[Dict[str, Any]], str]:
+        """
+        Extracts text from scanned image files (PNG, JPG, TIFF) via Tesseract OCR.
+        """
         extracted_text = ""
         if OCR_AVAILABLE:
             try:
@@ -203,6 +252,9 @@ class DocumentProcessor:
 
     @classmethod
     def _process_text_file(cls, file_path: str, filename: str) -> Tuple[int, List[Dict[str, Any]], str]:
+        """
+        Extracts and chunks plain text files (.txt, .md, .csv, .json).
+        """
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 text = f.read()
@@ -215,7 +267,10 @@ class DocumentProcessor:
 
     @classmethod
     def _chunk_page_text(cls, page_text: str, filename: str, page_num: int, start_chunk_id: int) -> List[DocumentChunk]:
-        """Splits page text into readable chunks with minimum semantic boundaries."""
+        """
+        Splits page text into coherent paragraph-level chunks of ~400 characters,
+        preserving sentence integrity for semantic RAG retrieval.
+        """
         chunks = []
         raw_paras = [p.strip() for p in page_text.split("\n\n") if p.strip()]
         
@@ -245,4 +300,3 @@ class DocumentProcessor:
             chunks.append(DocumentChunk(cid, filename, page_num, chunk_text))
 
         return chunks
-

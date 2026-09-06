@@ -1,18 +1,39 @@
+"""
+================================================================================
+BidVerify AI — GeM Bid Compliance Verification (SIH26100)
+AI Engine & System Configuration REST API Router (/api/settings)
+================================================================================
+
+Description:
+    This router provides endpoints to configure and customize:
+    1. Active AI Provider ('smart_mock' Built-in Smart RAG, 'gemini' Google API, 'openai' OpenAI API).
+    2. API Keys management with automatic masking for security.
+    3. LLM Model Selection (e.g. 'gemini-1.5-flash', 'gpt-4o-mini').
+    4. Document OCR Parsing mode ('hybrid', 'native', 'ocr').
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import SystemSetting
 from app.schemas import SettingsUpdate
 
+# Initialize sub-router with '/api/settings' prefix
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
 
 
+# ------------------------------------------------------------------------------
+# 1. Retrieve Current System & AI Engine Configuration
+# ------------------------------------------------------------------------------
 @router.get("")
 def get_settings(db: Session = Depends(get_db)):
+    """
+    Returns current system settings with masked API keys for secure frontend display.
+    """
     rows = db.query(SystemSetting).all()
     settings_dict = {r.key: r.value for r in rows}
     
-    # Mask API keys for safety
+    # Mask API keys for safety (e.g. "AIza...9912")
     gemini_key = settings_dict.get("gemini_api_key", "")
     openai_key = settings_dict.get("openai_api_key", "")
     
@@ -30,9 +51,16 @@ def get_settings(db: Session = Depends(get_db)):
     }
 
 
+# ------------------------------------------------------------------------------
+# 2. Update System & AI Engine Configuration
+# ------------------------------------------------------------------------------
 @router.post("")
 def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)):
+    """
+    Persists updated AI provider, API keys, or OCR processing mode to the database.
+    """
     def set_val(key: str, val: str):
+        """Helper to upsert a key-value setting in the database."""
         if val is not None:
             obj = db.query(SystemSetting).filter(SystemSetting.key == key).first()
             if not obj:
@@ -41,6 +69,7 @@ def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)):
             else:
                 obj.value = val
 
+    # Upsert provided settings
     if payload.llm_provider:
         set_val("llm_provider", payload.llm_provider)
     if payload.gemini_api_key is not None and payload.gemini_api_key != "":
@@ -53,5 +82,7 @@ def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)):
         set_val("ocr_mode", payload.ocr_mode)
 
     db.commit()
-    return {"message": "Settings updated successfully", "provider": payload.llm_provider}
-
+    return {
+        "message": "AI Engine settings updated successfully",
+        "provider": payload.llm_provider
+    }

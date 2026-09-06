@@ -1,3 +1,27 @@
+"""
+================================================================================
+BidVerify AI — GeM Bid Compliance Verification (SIH26100)
+AI Compliance Verification Engine & RAG Semantic Matching Service
+================================================================================
+
+Description:
+    This is the core evaluation brain of the BidVerify platform.
+    It implements:
+    1. Retrieval-Augmented Generation (RAG) chunk ranking and keyword boosting.
+    2. Multi-Provider AI support:
+       - Built-in High-Precision Deterministic Smart RAG Engine (100% offline, zero API key required).
+       - Google Gemini API (gemini-1.5-flash) with structured JSON schema responses.
+       - OpenAI API (gpt-4o-mini / gpt-4o).
+    3. Specialized rule-based semantic validators:
+       - Financial Turnover : Numeric extraction, INR Cr/Lakh threshold comparison.
+       - Past Experience    : Years in operation, incorporation date calculations.
+       - ISO Quality        : ISO 9001/27001 certificate number and expiry date checks.
+       - Statutory Registrations: 15-digit GSTIN regex & PAN verification.
+       - Legal / Debarment  : Non-blacklisting notarized affidavit verification.
+       - Make in India (MII): Local content percentage verification (Class-I >= 50%).
+    4. AI Auto-Parser for converting raw pasted tender text into structured discrete criteria.
+"""
+
 import os
 import re
 import json
@@ -5,10 +29,10 @@ import httpx
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 
+
 class ComplianceEngine:
     """
-    RAG-based AI Compliance Engine for GeM Tender Verification.
-    Supports Google Gemini, OpenAI, Anthropic, and Built-in Smart RAG Engine.
+    RAG-based AI Compliance Engine for GeM Tender Technical Verification.
     """
 
     @classmethod
@@ -21,11 +45,28 @@ class ComplianceEngine:
         model_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Evaluates a single requirement against the list of extracted document chunks.
+        Evaluates a single tender requirement against the list of extracted document chunks.
+
+        Workflow:
+            1. Performs keyword & category boosted chunk retrieval to find top-4 relevant chunks.
+            2. If an external LLM (Gemini or OpenAI) is active and has an API key, delegates to it.
+            3. Otherwise, falls back to the high-precision Built-in Smart RAG Engine.
+
+        Returns:
+            Dict[str, Any]:
+                - status: 'COMPLIANT', 'NON_COMPLIANT', or 'NEEDS_VERIFICATION'
+                - confidence_score: Float between 0.0 and 100.0
+                - evidence_snippet: Exact quoted text from source document
+                - document_name: Filename of the source document
+                - page_number: Page number where evidence was found
+                - extracted_value: Parsed value from document (e.g. '₹ 18.50 Cr', '7 Years')
+                - required_value: Tender threshold (e.g. '≥ ₹ 10.00 Cr')
+                - reasoning: Concise 1-2 sentence explainable justification
         """
         # Step 1: Retrieve top relevant chunks for this requirement
         relevant_chunks = cls._retrieve_relevant_chunks(requirement, document_chunks, top_k=4)
 
+        # Handle case where no documents match the requirement at all
         if not relevant_chunks:
             return {
                 "status": "NEEDS_VERIFICATION",
@@ -55,9 +96,12 @@ class ComplianceEngine:
             except Exception as e:
                 print(f"[OpenAI LLM Error] {str(e)}, falling back to Built-in Smart Engine")
 
-        # Step 3: Built-in Smart RAG & Deterministic Reasoning Engine (High Precision)
+        # Step 3: Built-in Smart RAG & Deterministic Reasoning Engine (High Precision, Offline)
         return cls._evaluate_with_smart_engine(requirement, relevant_chunks)
 
+    # --------------------------------------------------------------------------
+    # RAG Semantic Retrieval & Keyword Booster
+    # --------------------------------------------------------------------------
     @classmethod
     def _retrieve_relevant_chunks(
         cls,
@@ -66,17 +110,17 @@ class ComplianceEngine:
         top_k: int = 4
     ) -> List[Dict[str, Any]]:
         """
-        Semantic & Keyword relevance scoring over document chunks.
+        Scores and ranks all document chunks using weighted token matching,
+        category-specific keyword boosters, and filename relevance.
         """
         req_title = requirement.get("title", "").lower()
         req_desc = requirement.get("description", "").lower()
         req_category = requirement.get("category", "").lower()
-        req_type = requirement.get("requirement_type", "").lower()
         
         # Build query keywords
         tokens = set(re.findall(r'\b[a-z0-9]{3,}\b', f"{req_title} {req_desc}"))
         
-        # Category boosters
+        # Category boosters: give extra weight to domain-specific terminology
         boosters = []
         if "turnover" in req_title or "financial" in req_category or "revenue" in req_desc:
             boosters.extend(["turnover", "crore", "lakh", "audited", "balance sheet", "profit", "ca", "udin", "revenue", "fy", "financial"])
@@ -111,16 +155,20 @@ class ComplianceEngine:
                 if b in doc_name_lower:
                     score += 4.5
 
-            # Keyword proximity
+            # Keyword proximity match
             if any(term in text_lower for term in ["iso 9001", "iso 27001", "turnover", "years of experience", "gstin", "undertaking", "certificate"]):
                 score += 5.0
 
             if score > 0:
                 scored_chunks.append((score, ch))
 
+        # Rank descending by score and return top_k
         scored_chunks.sort(key=lambda x: x[0], reverse=True)
         return [item[1] for item in scored_chunks[:top_k]]
 
+    # --------------------------------------------------------------------------
+    # Built-in Smart Deterministic Engine (Offline / Zero-Config)
+    # --------------------------------------------------------------------------
     @classmethod
     def _evaluate_with_smart_engine(
         cls,
@@ -129,13 +177,12 @@ class ComplianceEngine:
     ) -> Dict[str, Any]:
         """
         High-precision deterministic rule + NLP evaluator.
+        Routes the requirement to specialized domain validators based on category.
         """
         title = requirement.get("title", "")
         desc = requirement.get("description", "")
         category = requirement.get("category", "TECHNICAL").upper()
-        req_type = requirement.get("requirement_type", "TEXT").upper()
         req_threshold = requirement.get("threshold_value")
-        req_unit = requirement.get("threshold_unit", "")
 
         best_chunk = relevant_chunks[0]
         text = best_chunk.get("text", "")
@@ -145,32 +192,31 @@ class ComplianceEngine:
         full_context = "\n---\n".join([f"[{c.get('document_name')} p.{c.get('page_number')}]: {c.get('text')}" for c in relevant_chunks])
         context_lower = full_context.lower()
 
-        # 1. FINANCIAL / TURNOVER EVALUATION
+        # 1. Financial / Turnover Evaluation
         if "turnover" in title.lower() or "financial" in category or "turnover" in desc.lower():
             return cls._evaluate_turnover(requirement, relevant_chunks)
 
-        # 2. EXPERIENCE EVALUATION
+        # 2. Experience Evaluation
         if "experience" in title.lower() or "years" in desc.lower() or category == "EXPERIENCE":
             return cls._evaluate_experience(requirement, relevant_chunks)
 
-        # 3. ISO / QUALITY CERTIFICATION EVALUATION
+        # 3. ISO / Quality Certification Evaluation
         if "iso" in title.lower() or "certification" in category or "certified" in title.lower():
             return cls._evaluate_iso_certificate(requirement, relevant_chunks)
 
-        # 4. GSTIN / PAN / STATUTORY REGISTRATION
+        # 4. GSTIN / PAN / Statutory Registration
         if "gst" in title.lower() or "pan" in title.lower() or "registration" in title.lower():
             return cls._evaluate_statutory_reg(requirement, relevant_chunks)
 
-        # 5. NON-BLACKLISTING / UNDERTAKING
+        # 5. Non-Blacklisting / Debarment Affidavit
         if "blacklisting" in title.lower() or "debar" in context_lower or "affidavit" in title.lower() or "clean" in title.lower():
             return cls._evaluate_blacklisting(requirement, relevant_chunks)
 
-        # 6. MAKE IN INDIA (MII) / LOCAL CONTENT
+        # 6. Make in India (MII) / Local Content
         if "make in india" in title.lower() or "mii" in title.lower() or "local content" in desc.lower():
             return cls._evaluate_make_in_india(requirement, relevant_chunks)
 
-        # 7. GENERIC / TECHNICAL SPECIFICATION MATCHING
-        # Check matching sentiment & positive keywords
+        # 7. Generic / Technical Specification Matching
         positive_cues = ["complies", "meets", "verified", "satisfied", "certified", "conforms", "valid", "qualified", "eligible", "accordance"]
         negative_cues = ["not compliant", "fails", "expired", "debarred", "not available", "inadequate", "shortfall", "below"]
 
@@ -213,9 +259,16 @@ class ComplianceEngine:
                 "reasoning": f"Found references in {doc_name} but requires manual officer check to confirm completeness."
             }
 
+    # --------------------------------------------------------------------------
+    # Specialized Validator: Financial Turnover
+    # --------------------------------------------------------------------------
     @classmethod
     def _evaluate_turnover(cls, req: Dict[str, Any], chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
-        # Required threshold in Crores
+        """
+        Parses numeric turnover figures in ₹ Crores from CA certificates, audited balance sheets,
+        and compares directly against the tender requirement threshold.
+        """
+        # Parse required threshold in Crores (default 10 Cr if unspecified)
         req_val_str = str(req.get("threshold_value", "10")).replace("₹", "").replace("Cr", "").replace("Crore", "").strip()
         try:
             req_cr = float(re.findall(r'[\d\.]+', req_val_str)[0])
@@ -228,7 +281,7 @@ class ComplianceEngine:
 
         for ch in chunks:
             t = ch.get("text", "")
-            # Patterns like: "Turnover: Rs 18.5 Crores", "₹ 18.50 Cr", "INR 18,50,00,000", "Annual Turnover: 18.5 Cr", "4.2 Cr"
+            # Patterns: "Turnover: Rs 18.5 Crores", "₹ 18.50 Cr", "Annual Turnover: 18.5 Cr"
             cr_matches = re.findall(r'(?:turnover|revenue|receipts)[^\n\.\;]*?(?:(?:rs\.?|inr|₹)\s*)?([\d\.]+)\s*(?:cr|crore|crores)', t, re.IGNORECASE)
             if cr_matches:
                 for m in cr_matches:
@@ -237,7 +290,7 @@ class ComplianceEngine:
                     except ValueError:
                         pass
 
-            # Also check direct Cr patterns
+            # Direct Cr patterns
             direct_cr = re.findall(r'(?:₹|rs\.?|inr)\s*([\d\.]+)\s*(?:cr|crore)', t, re.IGNORECASE)
             for m in direct_cr:
                 try:
@@ -246,7 +299,7 @@ class ComplianceEngine:
                     pass
 
         if found_amounts:
-            # Sort by amount (take average or max reported)
+            # Sort descending to find the highest verified turnover figure
             found_amounts.sort(key=lambda x: x[0], reverse=True)
             max_cr, snippet_text, doc_name, page_num = found_amounts[0]
             
@@ -275,7 +328,7 @@ class ComplianceEngine:
                     "reasoning": f"Bidder's reported turnover of ₹{max_cr:.2f} Cr is below the required threshold of ₹{req_cr:.2f} Cr."
                 }
 
-        # If mentioned CA / Audited statement but numeric extraction was ambiguous
+        # Mentioned financial document but exact number was ambiguous
         return {
             "status": "NEEDS_VERIFICATION",
             "confidence_score": 65.0,
@@ -287,8 +340,14 @@ class ComplianceEngine:
             "reasoning": "Financial certificate/statement found, but exact 3-year average turnover figure requires officer verification."
         }
 
+    # --------------------------------------------------------------------------
+    # Specialized Validator: Prior Experience
+    # --------------------------------------------------------------------------
     @classmethod
     def _evaluate_experience(cls, req: Dict[str, Any], chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Parses years of operational experience or computes duration from incorporation date.
+        """
         req_val_str = str(req.get("threshold_value", "5")).strip()
         try:
             req_yrs = float(re.findall(r'[\d\.]+', req_val_str)[0])
@@ -298,7 +357,7 @@ class ComplianceEngine:
         found_years = []
         for ch in chunks:
             t = ch.get("text", "")
-            # e.g., "7 years of experience", "operating since 2017", "experience of over 6 years"
+            # Patterns: "7 years of experience", "operating since 2017"
             matches = re.findall(r'(\d+)\+?\s*(?:years|yrs)\s*(?:of)?\s*(?:experience|standing|operation|track record)', t, re.IGNORECASE)
             for m in matches:
                 try:
@@ -306,7 +365,7 @@ class ComplianceEngine:
                 except ValueError:
                     pass
 
-            # Check established year: e.g. "Incorporated in 2017"
+            # Incorporation year calculation (e.g. 2026 - 2017 = 9 years)
             inc_match = re.findall(r'(?:incorporated|established|registered|operating since|founded in)\s*(?:in|year)?\s*(20\d\d|19\d\d)', t, re.IGNORECASE)
             for y in inc_match:
                 try:
@@ -355,19 +414,24 @@ class ComplianceEngine:
             "reasoning": "Work order / profile mentions experience but exact duration needs manual validation against contract completion certificates."
         }
 
+    # --------------------------------------------------------------------------
+    # Specialized Validator: ISO Quality Management Certification
+    # --------------------------------------------------------------------------
     @classmethod
     def _evaluate_iso_certificate(cls, req: Dict[str, Any], chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Validates ISO 9001 / ISO 27001 certificates and verifies certificate expiration dates.
+        """
         for ch in chunks:
             t = ch.get("text", "")
             t_lower = t.lower()
 
             if "iso 9001" in t_lower or "iso 27001" in t_lower or "iso 20000" in t_lower or "iso" in t_lower:
-                # Check for validity / expiration
-                # e.g., "valid until 15-Dec-2027", "Expiry Date: 2023", "Expired"
                 is_expired = False
                 expiry_year = None
-                exp_matches = re.findall(r'(?:expiry|valid(?:ity)?\s*(?:till|until|through|date)?)\s*[:\-]?\s*([0-9]{1,2}[/\-\.][0-9]{1,2}[/\-\.](20\d\d)|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*(20\d\d)|(20\d\d))', t, re.IGNORECASE)
                 
+                # Check for explicit expiry dates
+                exp_matches = re.findall(r'(?:expiry|valid(?:ity)?\s*(?:till|until|through|date)?)\s*[:\-]?\s*([0-9]{1,2}[/\-\.][0-9]{1,2}[/\-\.](20\d\d)|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*(20\d\d)|(20\d\d))', t, re.IGNORECASE)
                 for em in exp_matches:
                     for part in em:
                         if part.startswith("20") and len(part) == 4:
@@ -375,6 +439,7 @@ class ComplianceEngine:
                             if expiry_year < 2026:
                                 is_expired = True
 
+                # Disqualify if expired
                 if "expired" in t_lower or is_expired:
                     return {
                         "status": "NON_COMPLIANT",
@@ -387,7 +452,7 @@ class ComplianceEngine:
                         "reasoning": f"ISO 9001 certificate found in '{ch.get('document_name')}' shows expiry date ({expiry_year or 'Past'}) and is not currently valid."
                     }
 
-                # Valid Certificate
+                # Valid Active Certificate
                 cert_no_match = re.search(r'(?:Certificate\s*No\.?|Reg\s*No\.?)\s*[:\-]?\s*([A-Z0-9\-\/]+)', t, re.IGNORECASE)
                 cert_no = cert_no_match.group(1) if cert_no_match else "ISO 9001:2015 Certified"
                 
@@ -414,9 +479,14 @@ class ComplianceEngine:
             "reasoning": "No explicit ISO 9001 accreditation certificate page detected in the uploaded file bundle."
         }
 
+    # --------------------------------------------------------------------------
+    # Specialized Validator: Statutory Tax Registration (GSTIN & PAN)
+    # --------------------------------------------------------------------------
     @classmethod
     def _evaluate_statutory_reg(cls, req: Dict[str, Any], chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
-        # Check for GSTIN / PAN
+        """
+        Validates 15-character GSTIN format and 10-character PAN card format via regex.
+        """
         for ch in chunks:
             t = ch.get("text", "")
             gst_match = re.search(r'\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}\b', t)
@@ -459,8 +529,14 @@ class ComplianceEngine:
             "reasoning": "GST registration document was uploaded, but standard 15-character GSTIN was not clearly parsed from OCR."
         }
 
+    # --------------------------------------------------------------------------
+    # Specialized Validator: Non-Blacklisting & Legal Undertaking
+    # --------------------------------------------------------------------------
     @classmethod
     def _evaluate_blacklisting(cls, req: Dict[str, Any], chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Validates notarized non-blacklisting undertakings and clean track record affidavits.
+        """
         for ch in chunks:
             t = ch.get("text", "")
             t_lower = t.lower()
@@ -500,11 +576,17 @@ class ComplianceEngine:
             "reasoning": "Standard non-blacklisting affidavit requires officer review on notary stamp and authorized signatory."
         }
 
+    # --------------------------------------------------------------------------
+    # Specialized Validator: Make In India (MII) & Local Content
+    # --------------------------------------------------------------------------
     @classmethod
     def _evaluate_make_in_india(cls, req: Dict[str, Any], chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Validates Make in India local content percentage (Class-I Supplier >= 50%).
+        """
         for ch in chunks:
             t = ch.get("text", "")
-            # e.g., "Local Content: 65%", "Class-I Local Supplier (>= 50%)"
+            # Patterns: "Local Content: 65%", "Class-I Local Supplier (>= 50%)"
             pct_matches = re.findall(r'(?:local content|make in india|indigenous content)[^\n\.\;]*?(\d{1,3})\s*%', t, re.IGNORECASE)
             if pct_matches:
                 pct = float(pct_matches[0])
@@ -543,9 +625,12 @@ class ComplianceEngine:
             "reasoning": "MII declaration found in submitted documents."
         }
 
+    # --------------------------------------------------------------------------
+    # Snippet Extractor Utility
+    # --------------------------------------------------------------------------
     @classmethod
     def _extract_best_snippet(cls, text: str, keyword: str) -> str:
-        """Finds sentence containing the keyword or returns first 200 chars."""
+        """Finds the most informative single sentence containing the keyword."""
         if not text:
             return ""
         lines = [line.strip() for line in text.split("\n") if line.strip()]
@@ -554,6 +639,9 @@ class ComplianceEngine:
                 return line
         return text[:220].strip() + ("..." if len(text) > 220 else "")
 
+    # --------------------------------------------------------------------------
+    # Google Gemini API Integration (gemini-1.5-flash)
+    # --------------------------------------------------------------------------
     @classmethod
     async def _evaluate_with_gemini(
         cls,
@@ -562,7 +650,10 @@ class ComplianceEngine:
         api_key: str,
         model_name: Optional[str] = "gemini-1.5-flash"
     ) -> Optional[Dict[str, Any]]:
-        """Calls Google Gemini API with structured JSON schema output."""
+        """
+        Sends tender requirement and relevant document context to Google Gemini API
+        requesting a structured JSON object response.
+        """
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name or 'gemini-1.5-flash'}:generateContent?key={api_key}"
         
         context_str = "\n\n".join([
@@ -608,6 +699,9 @@ class ComplianceEngine:
                 return json.loads(text_content)
         return None
 
+    # --------------------------------------------------------------------------
+    # OpenAI API Integration (gpt-4o-mini)
+    # --------------------------------------------------------------------------
     @classmethod
     async def _evaluate_with_openai(
         cls,
@@ -616,7 +710,10 @@ class ComplianceEngine:
         api_key: str,
         model_name: Optional[str] = "gpt-4o-mini"
     ) -> Optional[Dict[str, Any]]:
-        """Calls OpenAI API with JSON output."""
+        """
+        Sends tender requirement and relevant document context to OpenAI API
+        requesting a JSON object response.
+        """
         endpoint = "https://api.openai.com/v1/chat/completions"
         context_str = "\n\n".join([
             f"=== DOCUMENT: {c.get('document_name')} | PAGE: {c.get('page_number')} ===\n{c.get('text')}"
@@ -660,22 +757,22 @@ class ComplianceEngine:
                 return json.loads(content)
         return None
 
+    # --------------------------------------------------------------------------
+    # AI Auto-Parser: Raw Tender Notice Text -> Structured Criteria Clauses
+    # --------------------------------------------------------------------------
     @classmethod
     def parse_raw_tender_requirements(cls, tender_text: str) -> List[Dict[str, Any]]:
         """
-        Extracts discrete checkable requirement items from raw tender eligibility text.
+        Extracts discrete checkable requirement items from raw pasted tender eligibility text.
+        Recognizes clause numbers, categories, numeric thresholds, and units.
         """
         requirements = []
         lines = [l.strip() for l in tender_text.split("\n") if l.strip()]
         
-        # Regex heuristics for clause numbers and requirement titles
-        current_req = None
-        
         for line in lines:
-            # Check if line starts with a number/clause like "1.", "Clause 4.1", "a)", "•"
+            # Detect numbered or bulleted prefixes (e.g. "1.", "Clause 4.1", "a)")
             clause_match = re.match(r'^(?:(?:clause|para|section)\s*)?([0-9]+(?:\.[0-9]+)*|[a-z]\))\s*[:\.\-]?\s*(.*)', line, re.IGNORECASE)
             
-            # Check common keywords in line
             line_lower = line.lower()
             is_new_item = False
             title = ""
@@ -684,6 +781,7 @@ class ComplianceEngine:
             thresh_val = None
             thresh_unit = None
 
+            # Financial Turnover pattern
             if "turnover" in line_lower:
                 title = "Annual Financial Turnover"
                 category = "FINANCIAL"
@@ -694,6 +792,7 @@ class ComplianceEngine:
                     thresh_unit = "Crores INR" if "cr" in line_lower else "Lakhs INR"
                 is_new_item = True
 
+            # Prior Experience pattern
             elif "experience" in line_lower:
                 title = "Prior Work Experience"
                 category = "EXPERIENCE"
@@ -704,6 +803,7 @@ class ComplianceEngine:
                     thresh_unit = "Years"
                 is_new_item = True
 
+            # Quality Certification (ISO) pattern
             elif "iso" in line_lower or "certification" in line_lower:
                 title = "Quality Management Certification (ISO 9001:2015)"
                 category = "CERTIFICATION"
@@ -712,6 +812,7 @@ class ComplianceEngine:
                 thresh_unit = "Accredited Certificate"
                 is_new_item = True
 
+            # Statutory Registration (GST & PAN) pattern
             elif "gst" in line_lower or "pan" in line_lower:
                 title = "Valid GST & PAN Registration"
                 category = "LEGAL"
@@ -720,6 +821,7 @@ class ComplianceEngine:
                 thresh_unit = "Tax Identification"
                 is_new_item = True
 
+            # Non-Blacklisting Undertaking pattern
             elif "blacklisting" in line_lower or "debarment" in line_lower or "clean track" in line_lower:
                 title = "Non-Blacklisting & Clean Track Record Undertaking"
                 category = "LEGAL"
@@ -728,6 +830,7 @@ class ComplianceEngine:
                 thresh_unit = "Affidavit"
                 is_new_item = True
 
+            # Make in India (MII) pattern
             elif "make in india" in line_lower or "mii" in line_lower or "local content" in line_lower:
                 title = "Make in India (MII) Preference Declaration"
                 category = "MII"
@@ -756,8 +859,8 @@ class ComplianceEngine:
                 # Append line to previous requirement description
                 requirements[-1]["description"] += " " + line
 
+        # Fallback split if no structured markers were detected
         if not requirements:
-            # Fallback split by bullet or lines
             for idx, l in enumerate(lines[:8]):
                 requirements.append({
                     "clause_no": f"Clause {idx+1}",
@@ -771,4 +874,3 @@ class ComplianceEngine:
                 })
 
         return requirements
-

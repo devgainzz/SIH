@@ -1,8 +1,35 @@
+/**
+ * ============================================================================
+ * BidVerify AI — Government e-Marketplace (GeM) Bid Compliance Verification Portal
+ * Frontend Single-Page Application (SPA) Built with React 18 & Tailwind CSS
+ * Smart India Hackathon (Problem Statement: SIH26100)
+ * ============================================================================
+ *
+ * Description:
+ *   This file contains the complete client-side application logic for BidVerify AI.
+ *   It manages tender repositories, document OCR uploads, AI compliance verification,
+ *   multi-vendor comparison matrices, officer manual overrides, and PDF audit exports.
+ *
+ * Architecture & Key Sections:
+ *   1. National Symbols & Government Branding Components (Ashoka Chakra, Emblem)
+ *   2. Status Badges & Requirement Category Helpers
+ *   3. Main App Component (State Management & API Handlers)
+ *   4. View 1: Tender Repository Dashboard (Dense Data Table & Statistics)
+ *   5. View 2: Tender Specification Workspace (Clauses, Matrix, Bid Submission)
+ *   6. View 3: Explainable Compliance Audit Report:
+ *      - Zone 1: सरल सारांश / Simple Summary (Layman-Friendly for Small Vendors)
+ *      - Zone 2: विस्तृत तकनीकी रिपोर्ट / Detailed Technical Report (For Evaluation Officers)
+ *   7. Modals: Officer Override Audit Stamp, AI Engine Settings, New Tender Creation
+ */
+
 const { useState, useEffect, useRef } = React;
 
+// API Base URL (Empty string for relative host endpoint)
 const API_BASE = "";
 
-// Helper for Lucide icons update
+/**
+ * Helper to trigger Lucide icon rendering after DOM updates
+ */
 function refreshIcons() {
   setTimeout(() => {
     if (window.lucide) {
@@ -11,10 +38,21 @@ function refreshIcons() {
   }, 50);
 }
 
-// Ashoka Chakra 24-spoke SVG Component
+/**
+ * AshokaChakra: SVG Vector component representing the 24-spoke Ashoka Chakra.
+ * Displayed in the government masthead.
+ */
 function AshokaChakra({ size = 28, className = "" }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" className={`text-[#0B3D91] ${className}`} fill="none" stroke="currentColor" strokeWidth="2.5">
+    <svg 
+      width={size} 
+      height={size} 
+      viewBox="0 0 100 100" 
+      className={`text-[#0B3D91] ${className}`} 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2.5"
+    >
       <circle cx="50" cy="50" r="46" strokeWidth="3" />
       <circle cx="50" cy="50" r="8" fill="currentColor" />
       {Array.from({ length: 24 }).map((_, i) => {
@@ -27,7 +65,9 @@ function AshokaChakra({ size = 28, className = "" }) {
   );
 }
 
-// National Emblem of India (Ashoka Lion Capital Placeholder SVG)
+/**
+ * NationalEmblem: State Emblem of India (Ashoka Lion Capital placeholder with 'सत्यमेव जयते').
+ */
 function NationalEmblem({ className = "w-10 h-12" }) {
   return (
     <div className={`border border-[#D1D5DB] bg-[#FAFAFA] flex flex-col items-center justify-center p-1 text-center shrink-0 ${className}`}>
@@ -39,7 +79,10 @@ function NationalEmblem({ className = "w-10 h-12" }) {
   );
 }
 
-// Category Badge Color & Icon Helper
+/**
+ * getCategoryInfo: Maps tender requirement categories to colors, icons, and plain-language hints.
+ * Categories: FINANCIAL (₹), EXPERIENCE (⏱), CERTIFICATION (📜), LEGAL (⚖), MII (🇮🇳).
+ */
 function getCategoryInfo(category) {
   switch ((category || "").toUpperCase()) {
     case "FINANCIAL": 
@@ -87,7 +130,12 @@ function getCategoryInfo(category) {
   }
 }
 
-// Government Solid Status Badge Component
+/**
+ * StatusBadge: Solid rectangular status badges conforming to gov.in standards:
+ * - COMPLIANT (#138808 Solid Green)
+ * - NON_COMPLIANT (#C51C1C Solid Red)
+ * - NEEDS_VERIFICATION (#D97706 Solid Amber)
+ */
 function StatusBadge({ status, size = "md" }) {
   const pad = size === "sm" ? "px-2 py-0.5 text-[11px]" : "px-3 py-1 text-xs";
   switch (status) {
@@ -118,42 +166,67 @@ function StatusBadge({ status, size = "md" }) {
   }
 }
 
-// Main BidVerify Application (GeM Government of India Portal)
+/**
+ * Main Application Root Component: App
+ */
 function App() {
+  // --------------------------------------------------------------------------
+  // Application State
+  // --------------------------------------------------------------------------
   const [tenders, setTenders] = useState([]);
   const [currentTender, setCurrentTender] = useState(null);
   const [currentVendor, setCurrentVendor] = useState(null);
   const [comparisonMatrix, setComparisonMatrix] = useState(null);
-  const [activeView, setActiveView] = useState("dashboard"); // dashboard, tender_detail, vendor_report
-  const [activeTab, setActiveTab] = useState("requirements"); // requirements, matrix, upload
-  const [reportViewMode, setReportViewMode] = useState("segregated"); // segregated, simple_only, detailed_only
+  
+  // Navigation & View Routing State
+  const [activeView, setActiveView] = useState("dashboard"); // 'dashboard', 'tender_detail', 'vendor_report'
+  const [activeTab, setActiveTab] = useState("requirements"); // 'requirements', 'matrix', 'upload'
+  const [reportViewMode, setReportViewMode] = useState("segregated"); // 'segregated', 'simple_only', 'detailed_only'
   const [filterStatus, setFilterStatus] = useState("ALL");
+  
+  // UI & Loading State
   const [loading, setLoading] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // Accessibility State (Font Scale & Language)
+  // Accessibility State (Text Size, Language & Dark Mode Toggle)
   const [fontScale, setFontScale] = useState(1);
-  const [language, setLanguage] = useState("EN"); // EN, HI
+  const [language, setLanguage] = useState("EN"); // 'EN', 'HI'
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem("bidverify_theme") === "dark";
+  });
 
-  // Modals
+  // Modal Dialogs State
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showNewTenderModal, setShowNewTenderModal] = useState(false);
+  const [newTenderInitialData, setNewTenderInitialData] = useState(null);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [selectedVerdict, setSelectedVerdict] = useState(null);
-  const [overrideForm, setOverrideForm] = useState({ status: "COMPLIANT", comment: "", officer_name: "Technical Evaluation Committee (GeM)" });
+  const [selectedCategoryCriteria, setSelectedCategoryCriteria] = useState(null);
+  const [dashboardSearch, setDashboardSearch] = useState("");
+  const [dashboardCategory, setDashboardCategory] = useState(null);
+  const [overrideForm, setOverrideForm] = useState({ 
+    status: "COMPLIANT", 
+    comment: "", 
+    officer_name: "Technical Evaluation Committee (GeM)" 
+  });
 
-  // Requirement Parser State
+  // AI Clause Parser State
   const [rawTenderText, setRawTenderText] = useState("");
   const [isParsingReqs, setIsParsingReqs] = useState(false);
 
-  // New Vendor Upload State
-  const [newVendorData, setNewVendorData] = useState({ vendor_name: "", vendor_gstin: "", vendor_pan: "", contact_email: "" });
+  // Vendor Bid Registration & Multi-File Upload State
+  const [newVendorData, setNewVendorData] = useState({ 
+    vendor_name: "", 
+    vendor_gstin: "", 
+    vendor_pan: "", 
+    contact_email: "" 
+  });
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [createdVendorId, setCreatedVendorId] = useState(null);
   const [uploadedDocsList, setUploadedDocsList] = useState([]);
 
-  // Settings State
+  // AI Engine Configuration Settings
   const [settings, setSettings] = useState({
     llm_provider: "smart_mock",
     gemini_api_key: "",
@@ -162,11 +235,17 @@ function App() {
     ocr_mode: "hybrid"
   });
 
+  /**
+   * Helper to display temporary toast notifications
+   */
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
   };
 
+  /**
+   * Accessibility Helper: Adjusts root font-scale dynamically
+   */
   const adjustFontScale = (delta) => {
     let newScale = 1;
     if (delta === 0) newScale = 1;
@@ -177,16 +256,43 @@ function App() {
     document.documentElement.style.setProperty("--gov-font-scale", newScale);
   };
 
-  // Fetch initial data
+  /**
+   * Dark Mode Toggle Handler
+   */
+  const toggleDarkMode = () => {
+    setDarkMode(prev => !prev);
+  };
+
+  // Synchronize Dark Mode class on document & body and persist in localStorage
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add("dark");
+      document.body.classList.add("dark");
+      localStorage.setItem("bidverify_theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      document.body.classList.remove("dark");
+      localStorage.setItem("bidverify_theme", "light");
+    }
+    refreshIcons();
+  }, [darkMode]);
+
+  // Initial load of tenders and settings on component mount
   useEffect(() => {
     loadTenders();
     loadSettings();
   }, []);
 
+  // Re-trigger icon rendering when view/state changes
   useEffect(() => {
     refreshIcons();
-  }, [activeView, activeTab, currentTender, currentVendor, showOverrideModal, showSettingsModal, showNewTenderModal, fontScale, reportViewMode]);
+  }, [activeView, activeTab, currentTender, currentVendor, showOverrideModal, showSettingsModal, showNewTenderModal, fontScale, reportViewMode, darkMode]);
 
+  // --------------------------------------------------------------------------
+  // API Fetching & Action Handlers
+  // --------------------------------------------------------------------------
+
+  /** Load all published tenders from /api/tenders */
   const loadTenders = async () => {
     try {
       setLoading(true);
@@ -203,6 +309,7 @@ function App() {
     }
   };
 
+  /** Load single tender details and comparison matrix from /api/tenders/{id} */
   const loadTenderDetail = async (tenderId) => {
     try {
       setLoading(true);
@@ -217,6 +324,7 @@ function App() {
     }
   };
 
+  /** Load multi-vendor matrix grid from /api/tenders/{id}/matrix */
   const loadComparisonMatrix = async (tenderId) => {
     try {
       const res = await fetch(`${API_BASE}/api/tenders/${tenderId}/matrix`);
@@ -227,6 +335,7 @@ function App() {
     }
   };
 
+  /** Load single vendor proposal details from /api/vendors/{id} */
   const loadVendorReport = async (vendorId) => {
     try {
       setLoading(true);
@@ -241,6 +350,7 @@ function App() {
     }
   };
 
+  /** Load AI Engine configuration settings from /api/settings */
   const loadSettings = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/settings`);
@@ -251,6 +361,7 @@ function App() {
     }
   };
 
+  /** Save updated AI Engine settings via POST /api/settings */
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     try {
@@ -269,7 +380,7 @@ function App() {
     }
   };
 
-  // Parse Raw Requirements
+  /** Trigger AI Clause Auto-Parser on unstructured text */
   const handleParseRequirements = async () => {
     if (!rawTenderText.trim() || !currentTender) return;
     try {
@@ -291,7 +402,7 @@ function App() {
     }
   };
 
-  // Submit New Vendor & Upload Documents
+  /** Register new vendor proposal, upload supporting documents, and trigger evaluation */
   const handleCreateVendorAndUpload = async (e) => {
     e.preventDefault();
     if (!newVendorData.vendor_name || !currentTender) {
@@ -301,6 +412,7 @@ function App() {
 
     try {
       setLoading(true);
+      // Step 1: Create vendor bid record
       const vRes = await fetch(`${API_BASE}/api/vendors/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -315,6 +427,7 @@ function App() {
       const vendor = await vRes.json();
       setCreatedVendorId(vendor.id);
 
+      // Step 2: Upload files if selected
       if (selectedFiles.length > 0) {
         const formData = new FormData();
         for (let i = 0; i < selectedFiles.length; i++) {
@@ -329,6 +442,7 @@ function App() {
       }
 
       showToast(`Vendor bid registered. Executing AI verification...`);
+      // Step 3: Trigger AI evaluation
       await handleEvaluateVendor(vendor.id);
     } catch (e) {
       showToast("Error creating vendor or uploading documents", "error");
@@ -337,7 +451,7 @@ function App() {
     }
   };
 
-  // Run AI Compliance Verification
+  /** Run AI Compliance Verification on a vendor proposal via POST /api/vendors/{id}/evaluate */
   const handleEvaluateVendor = async (vendorId) => {
     try {
       setEvaluating(true);
@@ -362,7 +476,7 @@ function App() {
     }
   };
 
-  // Submit Officer Override
+  /** Submit Officer Manual Override via POST /api/compliance/override */
   const handleSubmitOverride = async (e) => {
     e.preventDefault();
     if (!selectedVerdict) return;
@@ -388,7 +502,7 @@ function App() {
     }
   };
 
-  // Revert Officer Override
+  /** Revert Officer Manual Override via POST /api/compliance/revert-override/{id} */
   const handleRevertOverride = async (verdictId) => {
     try {
       const res = await fetch(`${API_BASE}/api/compliance/revert-override/${verdictId}`, {
@@ -419,13 +533,14 @@ function App() {
           <span className="hidden sm:inline font-medium">वाणिज्य एवं उद्योग मंत्रालय | Ministry of Commerce & Industry</span>
         </div>
 
+        {/* Accessibility & Utility Controls */}
         <div className="flex items-center gap-4 text-[11px]">
           <a href="#main-content" className="hover:underline text-[#0B3D91] font-bold">
             Skip to Main Content
           </a>
           <span className="text-gray-300">|</span>
           
-          {/* Text Resize Controls */}
+          {/* Text Resize Controls (A- / A / A+) */}
           <div className="flex items-center gap-1">
             <span className="text-gray-600 font-semibold mr-1">Text Size:</span>
             <button
@@ -453,7 +568,7 @@ function App() {
           
           <span className="text-gray-300">|</span>
           
-          {/* Language Toggle */}
+          {/* Bilingual Language Switcher */}
           <div className="flex items-center gap-1 font-bold">
             <button
               onClick={() => setLanguage("EN")}
@@ -469,10 +584,25 @@ function App() {
               हिन्दी
             </button>
           </div>
+
+          <span className="text-gray-300">|</span>
+
+          {/* Dark / High-Contrast Mode Toggle Button */}
+          <button
+            onClick={toggleDarkMode}
+            className={`px-2 py-0.5 border text-[11px] font-bold flex items-center gap-1.5 transition ${
+              darkMode
+                ? "bg-[#FF9933] text-black border-[#D97706]"
+                : "bg-white text-gray-800 border-gray-300 hover:bg-gray-100"
+            }`}
+            title={darkMode ? "Switch to Light Mode" : "Switch to Dark / High-Contrast Mode"}
+          >
+            <span>{darkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}</span>
+          </button>
         </div>
       </div>
 
-      {/* 3. Main Government Portal Branding Header (White Background) */}
+      {/* 3. Main Government Portal Branding Header */}
       <header className="bg-white border-b border-[#D1D5DB] px-6 py-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           
@@ -497,7 +627,7 @@ function App() {
               </p>
             </div>
 
-            {/* Subtle Ashoka Chakra Element */}
+            {/* Ashoka Chakra Graphic */}
             <div className="hidden lg:block ml-4 pl-4 border-l border-gray-200">
               <AshokaChakra size={32} className="opacity-80" />
             </div>
@@ -602,6 +732,7 @@ function App() {
             )}
           </div>
 
+          {/* AI Engine Status Button */}
           <div className="py-1">
             <button
               onClick={() => setShowSettingsModal(true)}
@@ -613,7 +744,7 @@ function App() {
         </div>
       </nav>
 
-      {/* 5. Breadcrumb Trail Bar */}
+      {/* 5. Breadcrumb Navigation Trail */}
       <div className="bg-[#E5E7EB] border-b border-[#D1D5DB] px-6 py-2 text-xs text-gray-700">
         <div className="max-w-7xl mx-auto flex items-center gap-1.5">
           <span className="text-[#0B3D91] font-semibold cursor-pointer hover:underline" onClick={() => setActiveView("dashboard")}>
@@ -645,7 +776,7 @@ function App() {
         </div>
       </div>
 
-      {/* Official Government Callout Banner */}
+      {/* Official Government Notice Callout */}
       <div className="max-w-7xl w-full mx-auto px-6 pt-4">
         <div className="gov-callout text-xs text-gray-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -656,7 +787,7 @@ function App() {
         </div>
       </div>
 
-      {/* Toast Alert */}
+      {/* Toast Alert Notification */}
       {toast && (
         <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 border text-xs font-bold text-white uppercase tracking-wide flex items-center gap-2 ${
           toast.type === "error" ? "bg-[#C51C1C] border-[#991B1B]" : "bg-[#138808] border-[#0D6E05]"
@@ -683,7 +814,15 @@ function App() {
               loadTenderDetail(t.id);
               setActiveView("tender_detail");
             }}
-            onCreateTender={() => setShowNewTenderModal(true)}
+            onCreateTender={() => {
+              setNewTenderInitialData(null);
+              setShowNewTenderModal(true);
+            }}
+            onViewCriteria={(cat) => setSelectedCategoryCriteria(cat)}
+            search={dashboardSearch}
+            setSearch={setDashboardSearch}
+            activeCategory={dashboardCategory}
+            setActiveCategory={setDashboardCategory}
           />
         )}
 
@@ -751,12 +890,43 @@ function App() {
         />
       )}
 
+      {/* Category Tender Criteria Inspection Modal */}
+      {selectedCategoryCriteria && (
+        <CategoryCriteriaModal
+          category={selectedCategoryCriteria}
+          onClose={() => setSelectedCategoryCriteria(null)}
+          onFilterTenders={(cat) => {
+            setSelectedCategoryCriteria(null);
+            setDashboardCategory(cat.id);
+            setDashboardSearch(cat.title.split(" ")[0]);
+            setActiveView("dashboard");
+          }}
+          onCreateTenderWithCategory={(cat) => {
+            setSelectedCategoryCriteria(null);
+            setNewTenderInitialData({
+              bid_number: `GEM/2026/B/${Math.floor(100000 + Math.random() * 900000)}`,
+              title: `Procurement of ${cat.title}`,
+              organization: cat.ministry,
+              category: cat.title,
+              estimated_value: cat.estValue,
+              submission_deadline: "20-Nov-2026 15:00:00"
+            });
+            setShowNewTenderModal(true);
+          }}
+        />
+      )}
+
       {/* New Tender Modal */}
       {showNewTenderModal && (
         <NewTenderModal
-          onClose={() => setShowNewTenderModal(false)}
+          initialData={newTenderInitialData}
+          onClose={() => {
+            setShowNewTenderModal(false);
+            setNewTenderInitialData(null);
+          }}
           onCreated={(newTender) => {
             setShowNewTenderModal(false);
+            setNewTenderInitialData(null);
             loadTenders();
             loadTenderDetail(newTender.id);
             setActiveView("tender_detail");
@@ -767,7 +937,6 @@ function App() {
 
       {/* 6. Official Indian Government Portal Footer */}
       <footer className="bg-[#0B3D91] text-white border-t-4 border-[#FF9933] mt-12 text-xs">
-        {/* Top Footer Navigation Links */}
         <div className="border-b border-[#072C6A] px-6 py-4">
           <div className="max-w-7xl mx-auto flex flex-wrap justify-center gap-6 text-[12px] font-semibold text-gray-200">
             <a href="#" className="hover:text-[#FF9933] hover:underline">Terms of Use</a>
@@ -786,7 +955,6 @@ function App() {
           </div>
         </div>
 
-        {/* Official Ownership & Technical Credit */}
         <div className="bg-[#072C6A] px-6 py-5 text-center text-[11px] text-gray-300 space-y-1.5">
           <div className="max-w-7xl mx-auto">
             <p className="font-semibold text-white">
@@ -796,7 +964,7 @@ function App() {
               Designed, Developed and Hosted by National Informatics Centre (NIC) | Problem Statement SIH26100.
             </p>
             <p className="text-gray-400 pt-1">
-              Last Reviewed and Updated on: <b>29 Aug 2026</b> | Version 1.0.0 (Production Build)
+              Last Reviewed and Updated on: <b>31 Aug 2026</b> | Version 1.0.0 (Production Build)
             </p>
           </div>
         </div>
@@ -805,21 +973,619 @@ function App() {
   );
 }
 
-// -------------------------------------------------------------
-// VIEW 1: DASHBOARD (DENSE GOVERNMENT TABLE)
-// -------------------------------------------------------------
-function DashboardView({ tenders, onSelectTender, onCreateTender }) {
-  const [search, setSearch] = useState("");
+// -----------------------------------------------------------------------------
+// 3D POPULAR PRODUCT CATEGORIES COMPONENT (GeM Marketplace Categories)
+// -----------------------------------------------------------------------------
+const GEM_PRODUCT_CATEGORIES = [
+  {
+    id: "it_hardware",
+    group: "it",
+    title: "Desktops, Laptops & Cloud Servers",
+    hindi: "कंप्यूटर, लैपटॉप एवं क्लाउड सर्वर",
+    bids: "1,840+ Active Tenders",
+    estValue: "₹ 1,450 Cr+",
+    discount: "Up to 45% GeM Direct Discount",
+    badge: "MII Class-I (≥50%)",
+    badgeColor: "bg-blue-600 text-white",
+    icon: "💻",
+    description: "Enterprise compute nodes, multi-socket rack servers, high-performance laptops & thin clients.",
+    svgType: "it",
+    ministry: "Ministry of Electronics & Information Technology (MeitY) / NIC",
+    financialCriteria: "Minimum average annual turnover ≥ ₹ 15.00 Crores over last 3 audited financial years. CA certificate with valid Unique Document Identification Number (UDIN) is mandatory.",
+    experienceCriteria: "Minimum 5 continuous years of experience in enterprise server supply and data center deployment for Central/State Govt/PSUs.",
+    technicalSpecs: [
+      "Processors: Latest Gen Intel Xeon Scalable / AMD EPYC (min 32 Cores)",
+      "Memory: 128 GB DDR5 ECC Registered RAM expandable to 1TB",
+      "Storage: Hot-swappable NVMe PCIe 4.0 SSD in RAID 1/5/10 configuration",
+      "Power: Dual Hot-Plug Redundant Platinum/Titanium Power Supplies (≥94% Efficiency)",
+      "Energy Efficiency: Energy Star 8.0 & RoHS Compliant Certification"
+    ],
+    mandatoryCerts: [
+      "ISO 9001:2015 (Quality Management System)",
+      "ISO 27001 (Information Security Management)",
+      "BIS CRS Registration for all computing hardware components",
+      "EPEAT Gold / Energy Star 8.0 certification"
+    ],
+    miiClause: "Make in India (MII) Class-I Local Supplier (minimum 50% local value addition in India). Self-declaration with local manufacturing address.",
+    statutoryAffidavits: [
+      "Active 15-digit GSTIN registration certificate",
+      "Permanent Account Number (PAN) issued by Income Tax Dept",
+      "Non-Blacklisting / Debarment notarized affidavit on ₹100 stamp paper",
+      "Manufacturer's Authorization Form (MAF) from OEM"
+    ],
+    warrantyTerms: "3 Years Comprehensive 24x7 On-Site OEM Warranty with 4-hour incident response and 24-hour hardware replacement SLA."
+  },
+  {
+    id: "medical",
+    group: "medical",
+    title: "Medical Diagnostics & ICU Devices",
+    hindi: "चिकित्सा उपकरण एवं ऑक्सीजन प्रणाली",
+    bids: "980+ Active Tenders",
+    estValue: "₹ 820 Cr+",
+    discount: "MoHFW Empanelled Rates",
+    badge: "CDSCO / ISO 13485",
+    badgeColor: "bg-emerald-600 text-white",
+    icon: "🏥",
+    description: "Multi-parameter patient monitors, oxygen concentrators, ventilators & ultrasound scanners.",
+    svgType: "medical",
+    ministry: "Ministry of Health & Family Welfare (MoHFW) / AIIMS",
+    financialCriteria: "Minimum average annual turnover ≥ ₹ 10.00 Crores over past 3 fiscal years. Net worth must be positive in all 3 years.",
+    experienceCriteria: "Minimum 4 years experience in supplying medical / hospital diagnostic devices to Government medical colleges or hospitals.",
+    technicalSpecs: [
+      "ECG: 12-lead simultaneous diagnostic monitoring with arrhythmia detection",
+      "SpO2: Masimo / Nellcor technology with perfusion index display",
+      "NIBP: Oscillometric method with auto/manual/stat modes and overpressure protection",
+      "Defibrillator Protection: In-built electrosurgical & defibrillation sync protection",
+      "Battery Backup: Rechargeable Li-ion battery providing ≥ 4 hours continuous operation"
+    ],
+    mandatoryCerts: [
+      "ISO 13485:2016 (Medical Devices Quality Management)",
+      "CDSCO Import / Manufacturing Medical Device License",
+      "US FDA (510k) or European CE (MDR) certification",
+      "Electrical Safety: IEC 60601-1-2 (Electromagnetic Compatibility)"
+    ],
+    miiClause: "Class-I Local Supplier (≥50% local content) or Class-II (≥20% local content).",
+    statutoryAffidavits: [
+      "Active GSTIN and PAN certificates",
+      "Non-Blacklisting declaration on notarized stamp paper",
+      "OEM Authorization Certificate with guarantee of 10-year spare parts availability",
+      "NABL accredited laboratory test calibration certificate"
+    ],
+    warrantyTerms: "3 Years Comprehensive On-Site Warranty + 2 Years Comprehensive Maintenance Contract (CMC) including all accessories & probes."
+  },
+  {
+    id: "solar_power",
+    group: "green",
+    title: "Solar Rooftop & Renewable Power Units",
+    hindi: "सौर ऊर्जा एवं नवीकरणीय पावर प्लांट",
+    bids: "760+ Active Tenders",
+    estValue: "₹ 680 Cr+",
+    discount: "MNRE Direct Subsidy Eligible",
+    badge: "ALMM Approved",
+    badgeColor: "bg-amber-600 text-white",
+    icon: "⚡",
+    description: "Mono-PERC solar modules, grid-tie hybrid inverters, LiFePO4 battery banks & solar pumps.",
+    svgType: "solar",
+    ministry: "Ministry of New and Renewable Energy (MNRE) / SECI",
+    financialCriteria: "Minimum average annual turnover ≥ ₹ 8.00 Crores. Solvency certificate of at least ₹ 3.00 Cr from a scheduled commercial bank.",
+    experienceCriteria: "Minimum 3 years experience installing grid-connected or off-grid solar rooftop / ground-mounted projects totaling at least 5 MW.",
+    technicalSpecs: [
+      "PV Modules: Mono-crystalline PERC half-cut cells (≥540 Wp, module efficiency ≥21.5%)",
+      "Inverter: On-grid string inverter with MPPT (Efficiency ≥98.5%, IP65 enclosure)",
+      "Mounting Structure: Hot-dip galvanized steel structure (min 80 microns coating) rated for 150 km/h wind speed",
+      "Battery: Lithium Iron Phosphate (LiFePO4) battery pack with smart BMS (≥4000 cycles at 80% DoD)",
+      "Monitoring: Real-time IoT RMS (Remote Monitoring System) with cloud telemetry"
+    ],
+    mandatoryCerts: [
+      "ALMM (Approved List of Models and Manufacturers) registered OEM",
+      "BIS IS 14286 / IEC 61215 (Design qualification & type approval)",
+      "IEC 61730 (Photovoltaic module safety qualification)",
+      "IEC 62109 / IEC 62116 (Inverter safety & anti-islanding protection)"
+    ],
+    miiClause: "Domestic Content Requirement (DCR) Compliant: Solar cells and modules must be 100% manufactured in India (MII Class-I ≥60%).",
+    statutoryAffidavits: [
+      "MNRE Channel Partner / Empanelment certificate",
+      "Active GSTIN and PAN copy",
+      "Notarized affidavit stating no pending arbitration with state DISCOMs",
+      "Manufacturer Warranty Undertaking"
+    ],
+    warrantyTerms: "25 Years Linear Performance Warranty on Solar PV Modules (≥90% output at 10 years, ≥80% output at 25 years) + 5 years comprehensive system AMC."
+  },
+  {
+    id: "ev_vehicles",
+    group: "green",
+    title: "Electric Vehicles & Transport Fleet",
+    hindi: "इलेक्ट्रिक वाहन एवं परिवहन बेड़ा",
+    bids: "540+ Active Tenders",
+    estValue: "₹ 510 Cr+",
+    discount: "FAME-II Subsidy Compliant",
+    badge: "Zero Emission",
+    badgeColor: "bg-teal-600 text-white",
+    icon: "🚗",
+    description: "Electric utility cars, passenger buses, garbage tippers, battery two-wheelers & fast DC chargers.",
+    svgType: "ev",
+    ministry: "Ministry of Road Transport and Highways (MoRTH) / Heavy Industries",
+    financialCriteria: "Minimum average annual turnover ≥ ₹ 25.00 Crores over past 3 financial years.",
+    experienceCriteria: "Minimum 3 years proven commercial automotive OEM / Authorized Dealer operations with delivery of at least 50 EV units to government departments.",
+    technicalSpecs: [
+      "Powertrain: Permanent Magnet Synchronous Motor (PMSM) with regenerative braking",
+      "Battery Pack: Advanced liquid-cooled LFP / NMC chemistry with IP67 ingress protection",
+      "Range: Minimum certified real-world driving range of 200 km on single charge (IDC)",
+      "Charging: Dual charging support (CCS-2 DC Fast Charging ≤ 45 mins + 3.3 kW AC Slow Charging)",
+      "Safety: Dual Airbags, ABS with EBD, Electronic Stability Control (ESC) & AIS-038 Rev 2 compliance"
+    ],
+    mandatoryCerts: [
+      "ARAI / ICAT Homologation and Type Approval Certificate (CMVR compliant)",
+      "AIS 156 / AIS 038 (Rev 2) Battery Safety Compliance Certificate",
+      "ISO 9001:2015 & IATF 16949 Automotive Quality Management",
+      "FAME-II Phased Manufacturing Programme (PMP) Certification"
+    ],
+    miiClause: "Class-I Local Supplier (Local value addition ≥ 50%).",
+    statutoryAffidavits: [
+      "Authorized Dealership / OEM Direct Manufacturer Certificate",
+      "Active GSTIN, PAN and valid Commercial Transport Registration documents",
+      "Non-Blacklisting declaration on ₹100 notarized stamp paper"
+    ],
+    warrantyTerms: "8 Years / 1,60,000 km Warranty on High Voltage Traction Battery & Motor + 3 Years / 1,00,000 km Comprehensive Vehicle Bumper-to-Bumper Warranty."
+  },
+  {
+    id: "surveillance",
+    group: "it",
+    title: "AI CCTV Surveillance & Cyber Security",
+    hindi: "सीसीटीवी निगरानी, ड्रोन एवं सुरक्षा उपकरण",
+    bids: "1,220+ Active Tenders",
+    estValue: "₹ 590 Cr+",
+    discount: "STQC / CERT-In Certified",
+    badge: "NDAA Compliant",
+    badgeColor: "bg-purple-600 text-white",
+    icon: "🛡️",
+    description: "4K AI IP Dome cameras, ANPR vehicle scanners, biometric access controllers & NVR arrays.",
+    svgType: "cctv",
+    ministry: "Ministry of Home Affairs (MHA) / Police Modernization",
+    financialCriteria: "Minimum average annual turnover ≥ ₹ 12.00 Crores over last 3 audited fiscal years.",
+    experienceCriteria: "Minimum 4 years experience deploying enterprise IP video surveillance networks with at least 500 IP camera nodes in government installations.",
+    technicalSpecs: [
+      "Resolution: 4K (8 Megapixel) Ultra HD Real-time recording (3840 x 2160 @ 30fps)",
+      "Sensor & Optics: 1/2.8\" Progressive Scan CMOS, Motorized Varifocal 2.8-12mm Lens",
+      "Night Vision: Smart IR Illumination up to 50 meters with ColorHunter / DarkFighter low-light tech",
+      "Edge AI: Deep-learning based Automatic Number Plate Recognition (ANPR), Facial Detection & Perimeter Intrusion",
+      "Hardware Security: Trusted Platform Module (TPM 2.0), NDAA-compliant SoC (Zero banned chipsets)"
+    ],
+    mandatoryCerts: [
+      "STQC (Standardisation Testing and Quality Certification) Security Approval",
+      "CERT-In Empanelled Lab Vulnerability & Cyber Audit Clearance Report",
+      "BIS IS 13252 (Part 1) Registration for Electronic Equipment",
+      "ISO 27001:2013 (Information Security) and ISO 9001"
+    ],
+    miiClause: "MII Class-I Local Supplier (≥50% local manufacturing / assembly in India).",
+    statutoryAffidavits: [
+      "Manufacturer Authorization Certificate (MAF) with verified MAC address prefix",
+      "Certificate of Origin certifying zero components from prohibited border nations",
+      "Active GSTIN, PAN, and Notarized Non-Blacklisting affidavit"
+    ],
+    warrantyTerms: "3 Years Comprehensive On-Site OEM Replacement Warranty including firmware updates, cyber patches, and 24x7 emergency response."
+  },
+  {
+    id: "furniture",
+    group: "office",
+    title: "Modular Smart Office Furniture",
+    hindi: "कार्यालय फर्नीचर एवं मॉड्यूलर वर्कस्टेशन",
+    bids: "890+ Active Tenders",
+    estValue: "₹ 340 Cr+",
+    discount: "Direct GeM Rate Contract",
+    badge: "BIFMA / ISO 9001",
+    badgeColor: "bg-indigo-600 text-white",
+    icon: "🪑",
+    description: "Ergonomic high-back chairs, height-adjustable desks, steel compactor storage & conference tables.",
+    svgType: "furniture",
+    ministry: "Ministry of Housing and Urban Affairs (MoHUA) / CPWD",
+    financialCriteria: "Minimum average annual turnover ≥ ₹ 5.00 Crores over last 3 financial years.",
+    experienceCriteria: "Minimum 3 years experience manufacturing and supplying modular office workstations / institutional furniture to government offices.",
+    technicalSpecs: [
+      "Table Tops: 25mm thick pre-laminated twin-side melamine particle board (E1 Grade, PVC 2mm edge-banded)",
+      "Understructure: Heavy-duty CRCA steel framework (min 1.2mm wall thickness) with epoxy powder coating (≥50 microns)",
+      "Ergonomic Chair: Synchronized multi-locking tilt mechanism, 3D adjustable armrests, Class-4 gas lift (BIFMA certified)",
+      "Raceway: Dual-compartment extruded aluminium raceway for power and structured data cabling",
+      "Storage: Motorized / Mechanical high-density mobile compactor storage with central locking"
+    ],
+    mandatoryCerts: [
+      "BIFMA (Business and Institutional Furniture Manufacturer's Association) Level 3",
+      "ISO 9001 (Quality), ISO 14001 (Environment), and ISO 45001 (Health & Safety)",
+      "Green Pro / IGBC Green Product Certification",
+      "NABL Accredited Test Lab Reports for load capacity, endurance, and VOC emissions"
+    ],
+    miiClause: "MII Class-I Local Supplier (minimum 50% local value addition in India).",
+    statutoryAffidavits: [
+      "Factory registration license & PCB (Pollution Control Board) consent to operate",
+      "Active GSTIN and PAN registration certificates",
+      "Notarized Non-Blacklisting declaration on ₹100 stamp paper"
+    ],
+    warrantyTerms: "3 Years Comprehensive On-Site Warranty on all furniture products, gas lifts, castor wheels, and lock mechanisms."
+  },
+  {
+    id: "stationery",
+    group: "office",
+    title: "Paper, Printing & Consumable Goods",
+    hindi: "मुद्रण सामग्री एवं कार्यालय स्टेशनरी",
+    bids: "650+ Active Tenders",
+    estValue: "₹ 180 Cr+",
+    discount: "Bulk Procurement Rates",
+    badge: "Eco-Mark Certified",
+    badgeColor: "bg-cyan-700 text-white",
+    icon: "📄",
+    description: "75/80 GSM copier paper reams, security toner cartridges, official registers & desktop stationery.",
+    svgType: "paper",
+    ministry: "Directorate of Printing / Department of Commerce",
+    financialCriteria: "Minimum average annual turnover ≥ ₹ 3.00 Crores over past 3 financial years.",
+    experienceCriteria: "Minimum 3 continuous years in supplying paper products or office consumable goods to Central/State Govt bodies.",
+    technicalSpecs: [
+      "Paper Substance: 75 GSM or 80 GSM (Tolerance ±2.5%) Virgin Pulp Copier Paper",
+      "Brightness & Whiteness: ISO Brightness ≥ 92%, CIE Whiteness ≥ 150",
+      "Opacity & Smoothness: Minimum 92% opacity, Bendtsen smoothness 150-250 ml/min",
+      "Moisture Content: Controlled 4.0% to 5.5% moisture content preventing printer jams",
+      "Toner Cartridges: OEM / High-yield compatible cartridges yielding ≥ 3,000 standard pages (ISO/IEC 19752)"
+    ],
+    mandatoryCerts: [
+      "BIS IS 14490:2018 (Plain Copier Paper Specification) Licensed Manufacturer",
+      "Eco-Mark / Green Pro Certification for environmentally benign paper",
+      "FSC (Forest Stewardship Council) or PEFC Chain of Custody Certification",
+      "ISO 9001:2015 and ISO 14001 Certification"
+    ],
+    miiClause: "MII Class-I Local Supplier (100% manufactured and converted in India).",
+    statutoryAffidavits: [
+      "Authorized Distributor / Mill Manufacturer Certificate",
+      "Active GSTIN and PAN copies",
+      "Notarized affidavit affirming supply of genuine, fresh, unexpired batch consumables"
+    ],
+    warrantyTerms: "100% Replacement Guarantee on defective, damaged, or moisture-affected paper reams and leaking toner cartridges within 48 hours."
+  },
+  {
+    id: "facility_services",
+    group: "office",
+    title: "Facility Management & Security Services",
+    hindi: "सफाई, सुरक्षा एवं सुविधा प्रबंधन सेवाएं",
+    bids: "1,520+ Active Tenders",
+    estValue: "₹ 1,120 Cr+",
+    discount: "Minimum Wage & EPF Compliant",
+    badge: "PSARA Licensed",
+    badgeColor: "bg-rose-700 text-white",
+    icon: "🧹",
+    description: "Integrated mechanized housekeeping, armed security personnel, horticulture & building maintenance.",
+    svgType: "services",
+    ministry: "Department of Personnel and Training (DoPT) / Central Ministries",
+    financialCriteria: "Minimum average 3-year turnover ≥ ₹ 20.00 Crores. Solvency certificate of at least ₹ 5.00 Cr from a Nationalised/Scheduled Bank.",
+    experienceCriteria: "Minimum 5 continuous years providing integrated facility management / manned security services to Central/State Govt complexes (at least 1 contract of ₹ 10 Cr+ or 2 contracts of ₹ 6 Cr+).",
+    technicalSpecs: [
+      "Mechanized Housekeeping: Industrial ride-on scrubbers, high-pressure washers, single-disc polishers & backpack vacuums",
+      "Manpower Deployment: Verified security supervisors, armed guards, un-armed guards, electricians, plumbers & sanitation staff",
+      "Chemicals: Green-certified eco-friendly cleaning consumables (Taski / Diversey or approved equivalent)",
+      "Attendance System: GPS/Biometric Aadhaar-linked real-time attendance logging system",
+      "Uniform & Safety PPE: Standardized uniform, photo ID cards, safety shoes, gloves, and reflective jackets"
+    ],
+    mandatoryCerts: [
+      "Valid PSARA (Private Security Agencies Regulation Act) License for the operating State",
+      "Active EPFO (Employees' Provident Fund) & ESIC (Employees' State Insurance) Registration",
+      "Labour Department Registration License under Contract Labour (R&A) Act, 1970",
+      "ISO 9001, ISO 14001, ISO 45001 (OH&S), and ISO 18788 (Security Operations)"
+    ],
+    miiClause: "100% Domestic Service Provider (Registered and operated in India).",
+    statutoryAffidavits: [
+      "Undertaking of strict compliance with Central / State Minimum Wages Act including EPF, ESIC, Bonus & Gratuity",
+      "Police character verification records for 100% deployed personnel",
+      "Active GSTIN and PAN copies",
+      "Notarized Non-Blacklisting Affidavit on ₹100 stamp paper"
+    ],
+    warrantyTerms: "100% SLA Guarantee: Zero disruption operations with 2-hour substitute deployment for any absenteeism and dedicated 24x7 Helpdesk Manager."
+  }
+];
+
+/**
+ * 3D Category SVG Visuals Component
+ */
+function CategoryIllustration({ type }) {
+  switch (type) {
+    case "it":
+      return (
+        <svg className="w-24 h-24 gem-category-img" viewBox="0 0 100 100" fill="none">
+          <rect x="15" y="16" width="70" height="48" rx="3" fill="#0B3D91" stroke="#3B82F6" strokeWidth="2"/>
+          <rect x="20" y="21" width="60" height="38" rx="2" fill="#0F172A"/>
+          {/* Screen elements */}
+          <line x1="26" y1="28" x2="52" y2="28" stroke="#38BDF8" strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="26" y1="35" x2="42" y2="35" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round"/>
+          <rect x="58" y="27" width="16" height="26" rx="1.5" fill="#1E293B" stroke="#38BDF8" strokeWidth="1"/>
+          <circle cx="66" cy="33" r="2" fill="#22C55E"/>
+          <circle cx="66" cy="39" r="2" fill="#38BDF8"/>
+          <circle cx="66" cy="45" r="2" fill="#F59E0B"/>
+          {/* Base & Keyboard */}
+          <path d="M43 64 L57 64 L61 74 L39 74 Z" fill="#1E293B" stroke="#64748B" strokeWidth="1.5"/>
+          <path d="M10 74 L90 74 L84 84 L16 84 Z" fill="#072C6A" stroke="#3B82F6" strokeWidth="2"/>
+          <line x1="24" y1="78" x2="76" y2="78" stroke="#93C5FD" strokeWidth="1.5" strokeDasharray="3 2"/>
+        </svg>
+      );
+    case "medical":
+      return (
+        <svg className="w-24 h-24 gem-category-img" viewBox="0 0 100 100" fill="none">
+          <rect x="18" y="18" width="64" height="52" rx="4" fill="#064E3B" stroke="#10B981" strokeWidth="2"/>
+          <rect x="23" y="23" width="54" height="42" rx="2" fill="#022C22"/>
+          {/* ECG Pulse */}
+          <path d="M26 44 L36 44 L40 32 L44 56 L48 38 L52 48 L56 44 L72 44" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <text x="50" y="32" fontSize="9" fill="#10B981" fontWeight="bold">98 BPM</text>
+          <text x="50" y="60" fontSize="8" fill="#6EE7B7" fontWeight="bold">SpO2 99%</text>
+          {/* Stand & Wheels */}
+          <rect x="46" y="70" width="8" height="15" fill="#334155"/>
+          <ellipse cx="50" cy="85" rx="24" ry="4" fill="#1E293B" stroke="#64748B" strokeWidth="1.5"/>
+          <circle cx="30" cy="88" r="3" fill="#0F172A"/>
+          <circle cx="70" cy="88" r="3" fill="#0F172A"/>
+        </svg>
+      );
+    case "solar":
+      return (
+        <svg className="w-24 h-24 gem-category-img" viewBox="0 0 100 100" fill="none">
+          {/* Sun */}
+          <circle cx="78" cy="22" r="10" fill="#F59E0B"/>
+          <line x1="78" y1="7" x2="78" y2="2" stroke="#F59E0B" strokeWidth="2"/>
+          <line x1="93" y1="22" x2="98" y2="22" stroke="#F59E0B" strokeWidth="2"/>
+          <line x1="89" y1="11" x2="93" y2="7" stroke="#F59E0B" strokeWidth="2"/>
+          {/* 3D Solar Panel */}
+          <polygon points="12,50 68,32 88,68 32,86" fill="#1E3A8A" stroke="#60A5FA" strokeWidth="2"/>
+          {/* Grid lines */}
+          <line x1="40" y1="41" x2="60" y2="77" stroke="#93C5FD" strokeWidth="1.5"/>
+          <line x1="22" y1="68" x2="78" y2="50" stroke="#93C5FD" strokeWidth="1.5"/>
+          {/* Stand */}
+          <path d="M48 62 L48 88 M60 52 L60 88" stroke="#475569" strokeWidth="3"/>
+          <line x1="38" y1="88" x2="70" y2="88" stroke="#334155" strokeWidth="4" strokeLinecap="round"/>
+        </svg>
+      );
+    case "ev":
+      return (
+        <svg className="w-24 h-24 gem-category-img" viewBox="0 0 100 100" fill="none">
+          {/* Car Body */}
+          <path d="M12 56 L24 38 L62 38 L84 50 L92 58 L92 70 L12 70 Z" fill="#0284C7" stroke="#38BDF8" strokeWidth="2"/>
+          <polygon points="28,42 58,42 58,54 20,54" fill="#E0F2FE"/>
+          <polygon points="62,42 78,50 78,54 62,54" fill="#E0F2FE"/>
+          {/* Wheels */}
+          <circle cx="30" cy="70" r="10" fill="#0F172A" stroke="#38BDF8" strokeWidth="2"/>
+          <circle cx="30" cy="70" r="4" fill="#94A3B8"/>
+          <circle cx="74" cy="70" r="10" fill="#0F172A" stroke="#38BDF8" strokeWidth="2"/>
+          <circle cx="74" cy="70" r="4" fill="#94A3B8"/>
+          {/* EV Plug / Leaf symbol */}
+          <circle cx="74" cy="24" r="10" fill="#10B981"/>
+          <path d="M71 24 L74 19 L77 24 L74 29 Z" fill="#FFFFFF"/>
+        </svg>
+      );
+    case "cctv":
+      return (
+        <svg className="w-24 h-24 gem-category-img" viewBox="0 0 100 100" fill="none">
+          {/* Wall Mount */}
+          <path d="M15 20 L30 20 L30 50 L15 50 Z" fill="#334155" stroke="#475569" strokeWidth="1.5"/>
+          <path d="M30 32 L46 32 L46 44 L30 44 Z" fill="#475569"/>
+          {/* Camera Dome / Body */}
+          <ellipse cx="62" cy="48" rx="24" ry="16" fill="#1E293B" stroke="#A855F7" strokeWidth="2"/>
+          <circle cx="64" cy="48" r="10" fill="#0F172A" stroke="#C084FC" strokeWidth="2"/>
+          <circle cx="64" cy="48" r="4" fill="#38BDF8"/>
+          <circle cx="72" cy="42" r="2" fill="#EF4444"/>
+          {/* Laser Scan Beam */}
+          <polygon points="64,54 32,88 96,88" fill="url(#laserGrad)" opacity="0.4"/>
+          <defs>
+            <linearGradient id="laserGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#A855F7" stopOpacity="0.8"/>
+              <stop offset="100%" stopColor="#A855F7" stopOpacity="0.0"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      );
+    case "furniture":
+      return (
+        <svg className="w-24 h-24 gem-category-img" viewBox="0 0 100 100" fill="none">
+          {/* Ergonomic Office Chair */}
+          <rect x="36" y="16" width="28" height="28" rx="4" fill="#312E81" stroke="#818CF8" strokeWidth="2"/>
+          <rect x="32" y="44" width="36" height="10" rx="3" fill="#1E1B4B" stroke="#6366F1" strokeWidth="1.5"/>
+          <path d="M50 54 L50 72" stroke="#475569" strokeWidth="4"/>
+          {/* Star Base */}
+          <line x1="28" y1="78" x2="72" y2="78" stroke="#334155" strokeWidth="3"/>
+          <circle cx="28" cy="82" r="3" fill="#0F172A"/>
+          <circle cx="50" cy="82" r="3" fill="#0F172A"/>
+          <circle cx="72" cy="82" r="3" fill="#0F172A"/>
+          {/* Desk partition */}
+          <rect x="14" y="52" width="12" height="26" fill="#E0E7FF" stroke="#A5B4FC" strokeWidth="1"/>
+        </svg>
+      );
+    case "paper":
+      return (
+        <svg className="w-24 h-24 gem-category-img" viewBox="0 0 100 100" fill="none">
+          {/* Paper Stacks */}
+          <polygon points="18,68 58,54 82,68 42,82" fill="#0E7490" stroke="#22D3EE" strokeWidth="1.5"/>
+          <polygon points="18,58 58,44 82,58 42,72" fill="#155E75" stroke="#67E8F9" strokeWidth="1.5"/>
+          <polygon points="18,48 58,34 82,48 42,62" fill="#F8FAFC" stroke="#0891B2" strokeWidth="2"/>
+          {/* Government Stamp / Emblem */}
+          <circle cx="50" cy="48" r="8" stroke="#0891B2" strokeWidth="1.5" strokeDasharray="2 1"/>
+          <line x1="34" y1="44" x2="62" y2="44" stroke="#64748B" strokeWidth="1"/>
+          <line x1="34" y1="52" x2="56" y2="52" stroke="#64748B" strokeWidth="1"/>
+        </svg>
+      );
+    case "services":
+      return (
+        <svg className="w-24 h-24 gem-category-img" viewBox="0 0 100 100" fill="none">
+          {/* Shield Base */}
+          <path d="M50 14 L82 26 L82 56 C82 72 50 86 50 86 C50 86 18 72 18 56 L18 26 Z" fill="#881337" stroke="#F43F5E" strokeWidth="2"/>
+          <path d="M50 20 L76 30 L76 54 C76 68 50 78 50 78 C50 78 24 68 24 54 L24 30 Z" fill="#4C0519"/>
+          {/* Building & Star */}
+          <rect x="42" y="44" width="16" height="24" fill="#FECDD3"/>
+          <polygon points="50,28 53,36 61,36 55,41 57,49 50,44 43,49 45,41 39,36 47,36" fill="#FBBF24"/>
+        </svg>
+      );
+    default:
+      return <div className="text-4xl">📦</div>;
+  }
+}
+
+/**
+ * PopularProductCategories: 3D interactive categories section
+ */
+function PopularProductCategories({ onSelectCategory, activeCategory, onCategoryFilterClick, onViewCriteria }) {
+  const [selectedGroup, setSelectedGroup] = useState("all");
+
+  const groups = [
+    { id: "all", label: "सभी श्रेणियां / All Categories" },
+    { id: "it", label: "कंप्यूटर एवं आईटी / IT & Computing" },
+    { id: "medical", label: "चिकित्सा एवं स्वास्थ्य / Medical & Health" },
+    { id: "green", label: "हरित ऊर्जा एवं वाहन / Green Energy & EV" },
+    { id: "office", label: "कार्यालय एवं सेवाएं / Office & Services" }
+  ];
+
+  const filteredCategories = selectedGroup === "all"
+    ? GEM_PRODUCT_CATEGORIES
+    : GEM_PRODUCT_CATEGORIES.filter(c => c.group === selectedGroup);
+
+  return (
+    <div className="bg-white border border-[#D1D5DB] p-5 space-y-4">
+      {/* Header */}
+      <div className="gov-section-heading">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🛍️</span>
+          <span>लोकप्रिय उत्पाद एवं सेवा श्रेणियां / Popular Product & Service Categories (GeM)</span>
+        </div>
+        <span className="text-[11px] font-mono normal-case font-normal text-gray-500 hidden sm:inline">
+          Direct Purchase & Bid-Ready Catalogs
+        </span>
+      </div>
+
+      <p className="text-xs text-gray-600 leading-relaxed">
+        Browse key government procurement categories on the GeM portal. Hover over any category to view interactive 3D specifications, estimated procurement budgets, and compliant tender opportunities.
+      </p>
+
+      {/* Filter Tabs */}
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-[#D1D5DB] pb-3">
+        {groups.map((g) => (
+          <button
+            key={g.id}
+            onClick={() => setSelectedGroup(g.id)}
+            className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition ${
+              selectedGroup === g.id
+                ? "bg-[#0B3D91] text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300"
+            }`}
+          >
+            {g.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 3D Perspective Grid */}
+      <div className="gem-category-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+        {filteredCategories.map((cat) => {
+          const isSelected = activeCategory === cat.id;
+
+          return (
+            <div
+              key={cat.id}
+              onClick={() => onCategoryFilterClick(cat)}
+              className={`gem-category-card-3d flex flex-col justify-between ${
+                isSelected ? "border-2 border-[#FF9933] ring-2 ring-[#FF9933]/30" : ""
+              }`}
+            >
+              {/* Saffron/White/Green Tricolor Top Accent Bar on Hover */}
+              <div className="gem-category-glow-bar"></div>
+
+              {/* Card Body */}
+              <div className="p-4 space-y-3">
+                {/* Top Badge & Code */}
+                <div className="flex items-center justify-between">
+                  <span className={`gem-category-badge-floating text-[10px] font-bold px-2 py-0.5 uppercase ${cat.badgeColor}`}>
+                    {cat.badge}
+                  </span>
+                  <span className="text-[10px] font-mono font-bold text-gray-500">
+                    {cat.bids}
+                  </span>
+                </div>
+
+                {/* 3D Enlarging Image Container */}
+                <div className="gem-category-img-container border border-[#E2E8F0]">
+                  <CategoryIllustration type={cat.svgType} />
+                </div>
+
+                {/* Title & Hindi Subtitle */}
+                <div>
+                  <h4 className="font-bold text-gray-900 text-xs uppercase leading-snug">
+                    {cat.title}
+                  </h4>
+                  <p className="text-[11px] font-semibold text-[#0B3D91] mt-0.5">
+                    {cat.hindi}
+                  </p>
+                </div>
+
+                {/* Description */}
+                <p className="text-[11px] text-gray-600 line-clamp-2 leading-relaxed">
+                  {cat.description}
+                </p>
+
+                {/* Budget & Discount Tag */}
+                <div className="bg-[#F8FAFB] p-2 border border-[#E5E7EB] text-[11px] space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500 font-semibold uppercase text-[10px]">Est. Procurement:</span>
+                    <span className="font-bold text-gray-900 font-mono">{cat.estValue}</span>
+                  </div>
+                  <div className="text-[10px] text-[#138808] font-bold flex items-center gap-1">
+                    <span>✓</span> {cat.discount}
+                  </div>
+                </div>
+              </div>
+
+              {/* Card Footer Action */}
+              <div className="p-3 bg-[#F9FAFB] border-t border-[#E5E7EB]">
+                {/* Primary Action Button: Saffron Theme */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onViewCriteria) onViewCriteria(cat);
+                  }}
+                  className="gov-btn-primary w-full text-[11px] py-1.5 flex items-center justify-center gap-1.5"
+                >
+                  <span>🔍</span> View Tender Criteria
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// VIEW 1: DASHBOARD (DENSE GOVERNMENT DATA TABLE & SYSTEM METRICS)
+// -----------------------------------------------------------------------------
+function DashboardView({
+  tenders,
+  onSelectTender,
+  onCreateTender,
+  onViewCriteria,
+  search,
+  setSearch,
+  activeCategory,
+  setActiveCategory
+}) {
+  const handleCategoryFilterClick = (category) => {
+    if (activeCategory === category.id) {
+      setActiveCategory(null);
+      setSearch("");
+    } else {
+      setActiveCategory(category.id);
+      setSearch(category.title.split(" ")[0]);
+    }
+  };
 
   const filtered = tenders.filter(t => 
-    t.bid_number.toLowerCase().includes(search.toLowerCase()) ||
-    t.title.toLowerCase().includes(search.toLowerCase()) ||
-    t.organization.toLowerCase().includes(search.toLowerCase())
+    t.bid_number.toLowerCase().includes((search || "").toLowerCase()) ||
+    t.title.toLowerCase().includes((search || "").toLowerCase()) ||
+    t.organization.toLowerCase().includes((search || "").toLowerCase()) ||
+    t.category.toLowerCase().includes((search || "").toLowerCase())
   );
 
   return (
     <div className="space-y-6">
-      {/* 4 Summary Metric Cells (Government Table Header Style) */}
+      {/* 4 Key Metric Metric Cells */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-white border border-[#D1D5DB] p-3.5">
           <div className="text-[11px] font-bold text-gray-600 uppercase">Active GeM Tenders</div>
@@ -848,7 +1614,14 @@ function DashboardView({ tenders, onSelectTender, onCreateTender }) {
         </div>
       </div>
 
-      {/* Main Table Section */}
+      {/* 3D POPULAR PRODUCT & SERVICE CATEGORIES SECTION */}
+      <PopularProductCategories
+        activeCategory={activeCategory}
+        onCategoryFilterClick={handleCategoryFilterClick}
+        onViewCriteria={onViewCriteria}
+      />
+
+      {/* Main Tender Repository Table */}
       <div className="bg-white border border-[#D1D5DB] p-5 space-y-4">
         <div className="gov-section-heading">
           <span>Tender Procurement Notice Repository</span>
@@ -861,24 +1634,39 @@ function DashboardView({ tenders, onSelectTender, onCreateTender }) {
           </button>
         </div>
 
-        {/* Search Bar */}
+        {/* Search Filter Controls */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#F9FAFB] p-3 border border-[#E5E7EB]">
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <label className="text-xs font-bold text-gray-700 uppercase">Search Records:</label>
             <input
               type="text"
-              placeholder="Search Bid Number, Ministry..."
+              placeholder="Search Bid Number, Ministry, Category..."
               className="px-3 py-1.5 text-xs border border-[#9CA3AF] bg-white focus:ring-1 focus:ring-[#0B3D91] w-72"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                if (!e.target.value) setActiveCategory(null);
+              }}
             />
+            {(search || activeCategory) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setActiveCategory(null);
+                }}
+                className="px-2 py-1 text-[11px] font-bold bg-gray-200 hover:bg-gray-300 text-gray-800 border border-gray-400 uppercase"
+              >
+                ✕ Clear Filter
+              </button>
+            )}
           </div>
           <span className="text-xs font-semibold text-gray-600">
-            Total Records: <b>{filtered.length}</b>
+            Total Matching Records: <b>{filtered.length}</b>
           </span>
         </div>
 
-        {/* Government Dense Table */}
+        {/* Dense Bordered Data Table */}
         <div className="overflow-x-auto border border-[#D1D5DB]">
           <table className="gov-table">
             <thead>
@@ -925,7 +1713,7 @@ function DashboardView({ tenders, onSelectTender, onCreateTender }) {
                     </span>
                   </td>
                   <td className="text-center">
-                    {/* Secondary Action Button: Green Theme */}
+                    {/* Secondary Action: Solid Green */}
                     <button
                       onClick={() => onSelectTender(t)}
                       className="gov-btn-secondary text-[11px]"
@@ -950,9 +1738,9 @@ function DashboardView({ tenders, onSelectTender, onCreateTender }) {
   );
 }
 
-// -------------------------------------------------------------
-// VIEW 2: TENDER WORKSPACE (DETAIL, MATRIX, UPLOAD)
-// -------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// VIEW 2: TENDER SPECIFICATION WORKSPACE (CLAUSES, MATRIX, SUBMISSION)
+// -----------------------------------------------------------------------------
 function TenderDetailView({
   tender,
   matrix,
@@ -972,7 +1760,7 @@ function TenderDetailView({
 }) {
   return (
     <div className="space-y-6">
-      {/* Tender Header Summary Box (Government Form Key-Value Grid) */}
+      {/* Tender Details Header Key-Value Grid */}
       <div className="bg-white border border-[#D1D5DB] p-5 space-y-4">
         <div className="gov-section-heading">
           <span>Tender Specification Details</span>
@@ -998,7 +1786,7 @@ function TenderDetailView({
           </div>
         </div>
 
-        {/* Tab Sub-navigation Bar */}
+        {/* Tab Navigation */}
         <div className="flex border-b border-[#D1D5DB] pt-2">
           <button
             onClick={() => setActiveTab("requirements")}
@@ -1033,10 +1821,10 @@ function TenderDetailView({
         </div>
       </div>
 
-      {/* TAB 1: ELIGIBILITY REQUIREMENTS */}
+      {/* TAB 1: ELIGIBILITY REQUIREMENTS & AI CLAUSE PARSER */}
       {activeTab === "requirements" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left: Requirements List Table with Layman Helpers */}
+          {/* Requirements List Table */}
           <div className="lg:col-span-2 bg-white border border-[#D1D5DB] p-5 space-y-4">
             <div className="gov-section-heading">
               <span>Tender Eligibility Criteria Clauses</span>
@@ -1094,7 +1882,7 @@ function TenderDetailView({
             </div>
           </div>
 
-          {/* Right: AI Clause Auto-Parser (Formal Box) */}
+          {/* AI Clause Auto-Parser Form */}
           <div className="bg-white border border-[#D1D5DB] p-5 space-y-4">
             <div className="gov-section-heading">
               <span>AI Clause Auto-Parser</span>
@@ -1113,7 +1901,7 @@ function TenderDetailView({
               />
               <span className="text-[10px] text-gray-500 italic block">Paste numbered or bulleted requirement lines.</span>
             </div>
-            {/* Primary Action Button: Saffron */}
+            {/* Primary Action Button: Saffron Theme */}
             <button
               onClick={onParseReqs}
               disabled={isParsingReqs || !rawTenderText.trim()}
@@ -1189,7 +1977,7 @@ function TenderDetailView({
                       );
                     })}
                     <td className="text-center border-l border-[#E5E7EB]">
-                      {/* Secondary Action: Green Theme */}
+                      {/* Secondary Action Button: Green */}
                       <button
                         onClick={() => onSelectVendor(v.vendor_id)}
                         className="gov-btn-secondary text-[11px]"
@@ -1212,10 +2000,10 @@ function TenderDetailView({
         </div>
       )}
 
-      {/* TAB 3: NEW VENDOR BID & OCR DROPZONE */}
+      {/* TAB 3: VENDOR BID REGISTRATION & MULTI-FILE OCR DROPZONE */}
       {activeTab === "upload" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Form with Layman Explanations */}
+          {/* Left: Registration & Upload Form */}
           <div className="lg:col-span-2 bg-white border border-[#D1D5DB] p-5 space-y-5">
             <div className="gov-section-heading">
               <span>Bidder Registration & Document Submission Form</span>
@@ -1281,7 +2069,7 @@ function TenderDetailView({
                 </div>
               </div>
 
-              {/* Upload Dropzone (Government Form Box) */}
+              {/* Upload Dropzone */}
               <div className="border-2 border-dashed border-[#9CA3AF] p-6 text-center bg-[#FAFAFA] space-y-2">
                 <div className="font-bold text-xs text-gray-800 uppercase">
                   Attach Vendor Supporting Documents (PDF, Scanned JPG/PNG, DOCX, TXT)
@@ -1329,7 +2117,7 @@ function TenderDetailView({
             </form>
           </div>
 
-          {/* Right: Category Guidance for Small Vendors */}
+          {/* Right: Checklist Guidance */}
           <div className="bg-white border border-[#D1D5DB] p-5 space-y-4 text-xs">
             <div className="gov-section-heading">
               <span>Required Document Checklist</span>
@@ -1359,9 +2147,9 @@ function TenderDetailView({
   );
 }
 
-// -------------------------------------------------------------
-// VIEW 3: EXPLAINABLE COMPLIANCE REPORT (SEGREGATED LAYMAN / TECHNICAL)
-// -------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// VIEW 3: EXPLAINABLE COMPLIANCE AUDIT REPORT (SEGREGATED LAYMAN / TECHNICAL)
+// -----------------------------------------------------------------------------
 function VendorReportView({
   tender,
   vendor,
@@ -1375,6 +2163,7 @@ function VendorReportView({
 }) {
   const verdicts = vendor.verdicts || [];
 
+  // Filter criteria by effective verdict status
   const compliantVerdicts = verdicts.filter(v => (v.is_overridden ? v.officer_override_status : v.status) === "COMPLIANT");
   const nonCompliantVerdicts = verdicts.filter(v => (v.is_overridden ? v.officer_override_status : v.status) === "NON_COMPLIANT");
   const needsReviewVerdicts = verdicts.filter(v => (v.is_overridden ? v.officer_override_status : v.status) === "NEEDS_VERIFICATION");
@@ -1483,9 +2272,9 @@ function VendorReportView({
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* ZONE 1: सरल सारांश / SIMPLE SUMMARY (FOR LAYMAN & VENDORS) */}
-      {/* ========================================================================= */}
+      {/* ======================================================================= */}
+      {/* ZONE 1: सरल सारांश / SIMPLE SUMMARY (FOR LAYMAN & SMALL VENDORS)       */}
+      {/* ======================================================================= */}
       {(reportViewMode === "segregated" || reportViewMode === "simple_only") && (
         <div className="bg-white border-2 border-blue-900 p-5 space-y-4">
           <div className="border-b-2 border-blue-900 pb-2 flex items-center justify-between">
@@ -1503,7 +2292,7 @@ function VendorReportView({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-            {/* 1. Green Tile (Compliant) */}
+            {/* 1. Green Tile (Compliant / Satisfied) */}
             <div className="border-2 border-[#138808] bg-[#F0FDF4] p-4 space-y-2.5">
               <div className="flex items-center justify-between border-b border-[#138808]/30 pb-2">
                 <span className="font-bold text-[#138808] uppercase text-xs flex items-center gap-1.5">
@@ -1531,7 +2320,7 @@ function VendorReportView({
               </ul>
             </div>
 
-            {/* 2. Red Tile (Non-Compliant) */}
+            {/* 2. Red Tile (Non-Compliant / Ineligible) */}
             <div className="border-2 border-[#C51C1C] bg-[#FEF2F2] p-4 space-y-2.5">
               <div className="flex items-center justify-between border-b border-[#C51C1C]/30 pb-2">
                 <span className="font-bold text-[#C51C1C] uppercase text-xs flex items-center gap-1.5">
@@ -1559,7 +2348,7 @@ function VendorReportView({
               </ul>
             </div>
 
-            {/* 3. Amber Tile (Needs Verification) */}
+            {/* 3. Amber Tile (Needs Verification / Action Needed) */}
             <div className="border-2 border-[#D97706] bg-[#FFFBEB] p-4 space-y-2.5">
               <div className="flex items-center justify-between border-b border-[#D97706]/30 pb-2">
                 <span className="font-bold text-[#D97706] uppercase text-xs flex items-center gap-1.5">
@@ -1590,9 +2379,9 @@ function VendorReportView({
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* ZONE 2: विस्तृत तकनीकी रिपोर्ट / DETAILED TECHNICAL AUDIT REPORT */}
-      {/* ========================================================================= */}
+      {/* ======================================================================= */}
+      {/* ZONE 2: विस्तृत तकनीकी रिपोर्ट / DETAILED TECHNICAL AUDIT REPORT       */}
+      {/* ======================================================================= */}
       {(reportViewMode === "segregated" || reportViewMode === "detailed_only") && (
         <div className="space-y-4">
           <div className="gov-section-heading">
@@ -1679,7 +2468,7 @@ function VendorReportView({
                     </div>
                   </div>
 
-                  {/* Verified Document Evidence Citation Block (Formal Government Quote Box) */}
+                  {/* Verified Document Evidence Citation Block */}
                   <div className="gov-callout text-xs space-y-1.5">
                     <div className="flex items-center justify-between text-[#0B3D91] font-bold text-[11px] uppercase">
                       <span>Verified Document Evidence Citation:</span>
@@ -1729,9 +2518,13 @@ function VendorReportView({
   );
 }
 
-// -------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // MODALS (FORMAL GOVERNMENT WINDOWS)
-// -------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+/**
+ * OfficerOverrideModal: Enables evaluation officers to manually override any AI verdict.
+ */
 function OfficerOverrideModal({ verdict, overrideForm, setOverrideForm, onClose, onSubmit }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -1805,7 +2598,7 @@ function OfficerOverrideModal({ verdict, overrideForm, setOverrideForm, onClose,
             >
               Cancel
             </button>
-            {/* Secondary/Confirm Action: Green */}
+            {/* Secondary Positive Action: Green */}
             <button
               type="submit"
               className="gov-btn-secondary text-xs"
@@ -1819,6 +2612,270 @@ function OfficerOverrideModal({ verdict, overrideForm, setOverrideForm, onClose,
   );
 }
 
+/**
+ * CategoryCriteriaModal: Comprehensive GeM Tender Eligibility & Technical Criteria Inspection Modal
+ * Displays 5 Core Procurement Pillars conforming to official GeM / gov.in procurement standards.
+ */
+function CategoryCriteriaModal({ category, onClose, onFilterTenders, onCreateTenderWithCategory }) {
+  if (!category) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-5 overflow-y-auto">
+      <div className="bg-white border-2 border-[#0B3D91] max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+        {/* Government Saffron-White-Green Top Stripe */}
+        <div className="h-1.5 w-full bg-gradient-to-r from-[#FF9933] via-[#FFFFFF] to-[#138808]"></div>
+
+        {/* Modal Header */}
+        <div className="p-4 sm:p-5 border-b border-[#D1D5DB] flex items-start justify-between bg-[#F8FAFB] gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-12 h-12 bg-white border border-[#D1D5DB] flex items-center justify-center text-2xl shrink-0 shadow-sm">
+              {category.icon || "📦"}
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-black text-sm sm:text-base text-[#0B3D91] uppercase tracking-wide">
+                  {category.title}
+                </h3>
+                <span className={`text-[10px] font-bold px-2 py-0.5 uppercase ${category.badgeColor}`}>
+                  {category.badge}
+                </span>
+                <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-2 py-0.5 border border-gray-200">
+                  {category.bids}
+                </span>
+              </div>
+              <p className="text-xs font-semibold text-[#0B3D91] mt-0.5">
+                {category.hindi}
+              </p>
+              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-600 font-medium">
+                <span>🏛️</span>
+                <span>Procuring Authority:</span>
+                <span className="font-bold text-gray-800">{category.ministry}</span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-800 font-black text-lg p-1 transition"
+            title="Close Modal"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Key Highlights Metrics Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-5 py-3 bg-[#EEF2F6] border-b border-[#D1D5DB] text-xs">
+          <div className="bg-white p-2 border border-[#D1D5DB]">
+            <div className="text-[10px] font-bold text-gray-500 uppercase">Est. Annual Budget</div>
+            <div className="text-xs font-black text-[#0B3D91] font-mono mt-0.5">{category.estValue}</div>
+          </div>
+          <div className="bg-white p-2 border border-[#D1D5DB]">
+            <div className="text-[10px] font-bold text-gray-500 uppercase">GeM Portal Benefits</div>
+            <div className="text-xs font-black text-[#138808] mt-0.5 truncate">{category.discount}</div>
+          </div>
+          <div className="bg-white p-2 border border-[#D1D5DB]">
+            <div className="text-[10px] font-bold text-gray-500 uppercase">Local Content (MII)</div>
+            <div className="text-xs font-black text-amber-700 mt-0.5">Class-I (≥50%)</div>
+          </div>
+          <div className="bg-white p-2 border border-[#D1D5DB]">
+            <div className="text-[10px] font-bold text-gray-500 uppercase">Evaluation Model</div>
+            <div className="text-xs font-black text-indigo-700 mt-0.5">QCBS / L1 Auto-Audit</div>
+          </div>
+        </div>
+
+        {/* Modal Scrollable Content: 5 Core Criteria Pillars */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs custom-scrollbar">
+          
+          {/* Pillar 1: Financial & Solvency */}
+          <div className="gem-criteria-box p-4 border-l-4 border-blue-600 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">💰</span>
+                <h4 className="font-black text-xs uppercase text-[#0B3D91] tracking-wider">
+                  स्तंभ 1: वित्तीय एवं वार्षिक टर्नओवर मानदंड / 1. Financial Turnover & Solvency
+                </h4>
+              </div>
+              <span className="bg-blue-100 text-blue-900 text-[10px] font-bold px-2 py-0.5 uppercase border border-blue-300">
+                Mandatory / अनिवार्य
+              </span>
+            </div>
+            <p className="text-xs text-gray-800 font-medium leading-relaxed">
+              {category.financialCriteria}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+              <div className="bg-white p-2 border border-blue-200 flex items-center gap-1.5 text-[11px] text-gray-700">
+                <span className="text-blue-600 font-bold">✓</span>
+                <span>CA Audited Balance Sheets (3 FYs)</span>
+              </div>
+              <div className="bg-white p-2 border border-blue-200 flex items-center gap-1.5 text-[11px] text-gray-700">
+                <span className="text-blue-600 font-bold">✓</span>
+                <span>18-digit UDIN CA Certificate</span>
+              </div>
+              <div className="bg-white p-2 border border-blue-200 flex items-center gap-1.5 text-[11px] text-gray-700">
+                <span className="text-blue-600 font-bold">✓</span>
+                <span>Positive Net Worth in all 3 FYs</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Pillar 2: Technical Specifications */}
+          <div className="gem-criteria-box p-4 border-l-4 border-indigo-600 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">⚙️</span>
+                <h4 className="font-black text-xs uppercase text-indigo-900 tracking-wider">
+                  स्तंभ 2: प्रमुख तकनीकी विनिर्देश एवं मानक / 2. Technical Specifications & Benchmarks
+                </h4>
+              </div>
+              <span className="bg-indigo-100 text-indigo-900 text-[10px] font-bold px-2 py-0.5 uppercase border border-indigo-300">
+                Specification Thresholds
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-600">
+              Bidder and OEM data sheets must strictly comply with or exceed all the following baseline hardware & performance thresholds:
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+              {category.technicalSpecs?.map((spec, idx) => (
+                <div key={idx} className="bg-white p-2.5 border border-indigo-100 flex items-start gap-2 text-[11px] text-gray-800 leading-snug">
+                  <span className="text-indigo-600 font-black shrink-0">▪</span>
+                  <span>{spec}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Pillar 3: Quality Certifications */}
+          <div className="gem-criteria-box p-4 border-l-4 border-emerald-600 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">📜</span>
+                <h4 className="font-black text-xs uppercase text-emerald-900 tracking-wider">
+                  स्तंभ 3: अनिवार्य गुणवत्ता एवं विनियामक प्रमाणन / 3. Mandatory Quality Certifications
+                </h4>
+              </div>
+              <span className="bg-emerald-100 text-emerald-900 text-[10px] font-bold px-2 py-0.5 uppercase border border-emerald-300">
+                NABCB / BIS Approved
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-600">
+              Active accreditation certificates with validity on bid opening date issued by accredited certification bodies:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              {category.mandatoryCerts?.map((cert, idx) => (
+                <div key={idx} className="bg-white p-2.5 border border-emerald-200 flex items-center gap-2 text-[11px] font-semibold text-gray-800">
+                  <span className="text-[#138808] font-black shrink-0">✓</span>
+                  <span>{cert}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Pillar 4: Make In India (MII) & Statutory Affidavits */}
+          <div className="gem-criteria-box p-4 border-l-4 border-amber-600 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🇮🇳</span>
+                <h4 className="font-black text-xs uppercase text-amber-900 tracking-wider">
+                  स्तंभ 4: मेक इन इंडिया (MII) एवं वैधानिक शपथ पत्र / 4. Make in India & Statutory Affidavits
+                </h4>
+              </div>
+              <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 uppercase border border-amber-300">
+                Public Procurement Order (PPP-MII)
+              </span>
+            </div>
+            <div className="bg-amber-50 p-2.5 border border-amber-300 text-[11px] text-amber-900 font-semibold flex items-center gap-2">
+              <span>🇮🇳</span>
+              <span><b>MII Preference Clause:</b> {category.miiClause}</span>
+            </div>
+            <div className="space-y-1.5 pt-1">
+              <div className="text-[11px] font-bold text-gray-700 uppercase">Mandatory Statutory Documents:</div>
+              {category.statutoryAffidavits?.map((aff, idx) => (
+                <div key={idx} className="bg-white p-2 border border-amber-200 flex items-center gap-2 text-[11px] text-gray-800">
+                  <span className="text-amber-700 font-bold shrink-0">⚖</span>
+                  <span>{aff}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Pillar 5: Experience, Warranty & SLA */}
+          <div className="gem-criteria-box p-4 border-l-4 border-purple-600 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">⏱️</span>
+                <h4 className="font-black text-xs uppercase text-purple-900 tracking-wider">
+                  स्तंभ 5: कार्य अनुभव एवं वारंटी शर्तें / 5. Past Experience & SLA Warranty Terms
+                </h4>
+              </div>
+              <span className="bg-purple-100 text-purple-900 text-[10px] font-bold px-2 py-0.5 uppercase border border-purple-300">
+                Track Record & SLA
+              </span>
+            </div>
+            <div className="space-y-2 text-[11px] text-gray-800">
+              <div className="bg-white p-2.5 border border-purple-200">
+                <span className="font-bold text-purple-900 block mb-0.5">Prior Experience Requirement:</span>
+                <p className="leading-relaxed">{category.experienceCriteria}</p>
+              </div>
+              <div className="bg-white p-2.5 border border-purple-200">
+                <span className="font-bold text-purple-900 block mb-0.5">Comprehensive Warranty & SLA Commitment:</span>
+                <p className="leading-relaxed">{category.warrantyTerms}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* BidVerify AI Verification Pipeline Callout */}
+          <div className="gov-callout text-[11px] text-gray-800 flex items-start gap-3">
+            <div className="w-7 h-7 bg-[#0B3D91] text-white flex items-center justify-center font-bold text-sm shrink-0 mt-0.5">
+              AI
+            </div>
+            <div className="space-y-0.5">
+              <div className="font-black text-[#0B3D91] uppercase tracking-wide">
+                BidVerify AI Evidentiary Verification Guarantee
+              </div>
+              <p className="text-gray-600 leading-relaxed">
+                When vendors submit their tender bid documentation, BidVerify AI automatically extracts and evaluates technical sheets, CA turnover certificates, ISO validity dates, and Make-in-India declarations against these exact criteria clauses with page-level PDF citations.
+              </p>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Modal Footer Actions */}
+        <div className="p-4 bg-[#F9FAFB] border-t border-[#D1D5DB] flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="text-[11px] text-gray-500 font-mono">
+            Catalog Code: <span className="font-bold text-gray-800 uppercase">{category.id}</span> | GeM Spec v2026.1
+          </div>
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="gov-btn-neutral text-xs"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={() => onFilterTenders && onFilterTenders(category)}
+              className="gov-btn-neutral text-xs text-[#0B3D91] border-[#0B3D91] hover:bg-[#0B3D91] hover:text-white flex items-center gap-1.5"
+            >
+              <span>🔍</span> Filter Matching GeM Tenders
+            </button>
+            <button
+              type="button"
+              onClick={() => onCreateTenderWithCategory && onCreateTenderWithCategory(category)}
+              className="gov-btn-primary text-xs flex items-center gap-1.5"
+            >
+              <span>+</span> Create Tender with these Criteria
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * SettingsModal: Configures AI Engine providers (Smart RAG, Google Gemini, OpenAI).
+ */
 function SettingsModal({ settings, setSettings, onClose, onSave }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -1916,15 +2973,18 @@ function SettingsModal({ settings, setSettings, onClose, onSave }) {
   );
 }
 
-function NewTenderModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({
-    bid_number: `GEM/2026/B/${Math.floor(100000 + Math.random() * 900000)}`,
-    title: "",
-    organization: "Ministry of Electronics & Information Technology",
-    category: "IT Hardware & Cloud Infrastructure",
-    estimated_value: "₹ 15.00 Cr",
-    submission_deadline: "20-Nov-2026 15:00:00"
-  });
+/**
+ * NewTenderModal: Modal for publishing a new GeM tender specification.
+ */
+function NewTenderModal({ onClose, onCreated, initialData }) {
+  const [form, setForm] = useState(() => ({
+    bid_number: initialData?.bid_number || `GEM/2026/B/${Math.floor(100000 + Math.random() * 900000)}`,
+    title: initialData?.title || "",
+    organization: initialData?.organization || "Ministry of Electronics & Information Technology",
+    category: initialData?.category || "IT Hardware & Cloud Infrastructure",
+    estimated_value: initialData?.estimated_value || "₹ 15.00 Cr",
+    submission_deadline: initialData?.submission_deadline || "20-Nov-2026 15:00:00"
+  }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -2004,6 +3064,16 @@ function NewTenderModal({ onClose, onCreated }) {
             </div>
           </div>
 
+          <div>
+            <label className="block font-bold text-gray-700 uppercase text-[11px] mb-1">Product / Service Category</label>
+            <input
+              type="text"
+              className="w-full p-2 border border-[#9CA3AF] bg-white focus:ring-1 focus:ring-[#0B3D91]"
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+            />
+          </div>
+
           <div className="pt-2 flex justify-end gap-2 border-t border-[#E5E7EB]">
             {/* Neutral Action: Outline Navy */}
             <button
@@ -2027,5 +3097,13 @@ function NewTenderModal({ onClose, onCreated }) {
   );
 }
 
-// Render Application
-ReactDOM.render(<App />, document.getElementById("root"));
+// -----------------------------------------------------------------------------
+// Application Render Entrypoint (React 18 createRoot)
+// -----------------------------------------------------------------------------
+const container = document.getElementById("root");
+if (ReactDOM.createRoot) {
+  const root = ReactDOM.createRoot(container);
+  root.render(<App />);
+} else {
+  ReactDOM.render(<App />, container);
+}
